@@ -1,0 +1,45 @@
+# 复制为 config/settings.yaml 并填你的真实参数。settings.yaml 不入库。
+
+# ============ 汇率 ============
+fx:
+  # KRW -> CNY。可手填，或后续接实时汇率源。1 KRW ≈ ? CNY
+  krw_to_cny: 0.0053
+
+# ============ 采购侧成本（韩国买入 → 寄到得物）============
+# 所有比例用小数（0.1 = 10%）
+cost:
+  # 韩国外国人离境退税：实际到手退税占含税价的比例（约 7%~9%，按你实际渠道填）
+  vat_refund_rate: 0.08
+  # 国际直邮单件物流费（CNY）
+  shipping_cny: 60
+  # 清关 / 关税（CNY）。小皮具多数走行邮或低税，按你实际填；可设为按件或按价比例
+  customs_cny: 0
+  customs_rate: 0.0
+  # 鉴别 + 包装 + 杂项（CNY）
+  handling_cny: 25
+
+# ============ 得物销售侧成本 ============
+# 卖出后从售价里扣掉的比例（技术服务费/佣金 + 转账/提现手续费等）
+sell:
+  platform_fee_rate: 0.05     # 平台佣金/技术服务费率
+  transfer_fee_rate: 0.01     # 转账/提现手续费率
+  # 其他每单固定成本（CNY），如鉴别费由卖家承担的部分
+  fixed_fee_cny: 0
+
+# ============ 选品评分权重 ============
+# 各分项先归一化到 0~1，再加权求和（正向加、负向减）。权重之和不要求为 1。
+scoring:
+  weights:
+    margin_rate: 0.30      # 利润率（净利润 / 采购成本）—— 正向
+    abs_profit: 0.25       # 绝对净利润（CNY/件）—— 正向
+    sales_speed: 0.25      # 销量速度（近30天成交 / 想要人数）—— 正向
+    stock_stability: 0.10  # LV 端 sellable 稳定性 —— 正向
+    competition: 0.10      # 竞争度（在售卖家/出价数量）—— 负向
+    capital_tied: 0.05     # 单件资金占用（采购成本越高越扣分）—— 负向
+    price_volatility: 0.05 # 得物价格波动 —— 负向
+
+  # 硬性过滤：不满足则直接淘汰，不进榜
+  filters:
+    min_abs_profit_cny: 80     # 单件净利润低于此值不要
+    min_margin_rate: 0.08      # 利润率低于此值不要
+    require_lv_sellable: true  # LV 端必须当前可买

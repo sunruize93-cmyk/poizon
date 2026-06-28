@@ -1,0 +1,13 @@
+# LV 抓取：伪装浏览器/App 的 TLS 指纹绕过 Akamai
+curl_cffi>=0.7.0
+# 得物官方 API 签名 / 通用请求
+requests>=2.31.0
+# 配置
+PyYAML>=6.0
+python-dotenv>=1.0.0
+# 数据处理
+pandas>=2.0.0
+# 报表导出
+openpyxl>=3.1.0
+# 重试 / 限频
+tenacity>=8.2.0

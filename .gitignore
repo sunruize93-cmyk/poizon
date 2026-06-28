@@ -1,0 +1,19 @@
+# 机密：代理、AppKey/Secret、账号
+.env
+config/settings.yaml
+config/skus.csv
+
+# 抓取快照与产出
+data/
+report/*.xlsx
+report/*.csv
+report/*.html
+
+# python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# 系统
+.DS_Store
