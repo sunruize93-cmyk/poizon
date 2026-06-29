@@ -100,35 +100,34 @@ class DewuOfficialClient:
         now = datetime.now(timezone.utc).isoformat(timespec="seconds")
         try:
             info = self.query_by_article_number(article_number, region=region)
-            data = info.get("data") or {}
-            spu = data.get("spuInfo") or {}
-            skus = data.get("skuInfoList") or []
-            if not skus:
+            items = info.get("data") or []
+            if not items:
                 return DewuProduct(article_no=article_number, fetched_at=now,
-                                   source="official_api", error="得物无此货号或未上架")
-            # 取首个可买 SKU 的行情（实际可按尺码遍历，这里先取代表 SKU）
-            sku = next((s for s in skus if s.get("buyStatus") == 1), skus[0])
-            sku_id = sku.get("skuId") or sku.get("dwSkuId")
-            price = self.get_lowest_price(sku_id, region=region, currency=currency)
-            pdata = price.get("data") or {}
-            sold = 0
-            if sku.get("barCode"):
-                try:
-                    bc = self.query_by_barcodes([sku["barCode"]])
-                    contents = (bc.get("data") or {}).get("contents") or []
-                    if contents:
-                        sold = int(contents[0].get("localSoldNum30", 0) or 0)
-                except Exception:
-                    pass
+                                   source="official_api", error="得物KR未找到/未上架")
+            item = items[0]
+            spu = item.get("spuInfo") or {}
+            skus = item.get("skuInfoList") or []
+            # 遍历可买 SKU 取得物市场最低价（不同 SKU 价差大，取整体最低作选品基准）
+            best_price = 0.0
+            best_vol = 0.0
+            for s in skus:
+                if s.get("buyStatus") != 1:
+                    continue
+                sid = s.get("skuId") or s.get("dwSkuId")
+                pdata = (self.get_lowest_price(sid, region=region, currency=currency).get("data") or {})
+                p = _market_price(pdata, currency)
+                if p > 0 and (best_price == 0 or p < best_price):
+                    best_price = p
+                    best_vol = _vol(pdata)
             return DewuProduct(
                 article_no=article_number,
                 spu_id=str(spu.get("spuId", "")),
                 title=spu.get("title", ""),
-                market_price_cny=float(pdata.get("minPrice", 0) or 0),
-                sales_30d=sold,
+                market_price_cny=best_price,
+                sales_30d=0,        # barCode 多为空，销量改走 id=86，见 TODO
                 wish_count=0,
                 seller_count=0,
-                price_volatility=_vol(pdata),
+                price_volatility=best_vol,
                 fetched_at=now, source="official_api",
             )
         except Exception as e:  # noqa: BLE001
@@ -136,12 +135,26 @@ class DewuOfficialClient:
                                source="official_api", error=str(e))
 
 
+def _market_price(pdata: dict, currency: str) -> float:
+    """从行情返回提取市场最低价并换算到货币单位。
+    CNY/USD/EUR 等返回值是最小单位(分)，需 /100；KRW/JPY 无小数，原值。"""
+    raw = pdata.get("globalMinPrice") or pdata.get("asiaMinPrice") or 0
+    if not raw:
+        leaks = pdata.get("leakInfos") or []
+        raw = leaks[0].get("leakPrice", 0) if leaks else 0
+    if not raw:
+        return 0.0
+    div = 1 if currency in ("KRW", "JPY") else 100
+    return round(float(raw) / div, 2)
+
+
 def _vol(pdata: dict) -> float:
-    """用 30天 (max-min)/avg 粗估价格波动。"""
-    mn, mx, avg = pdata.get("minPrice"), pdata.get("maxPrice"), pdata.get("averagePrice")
+    """用价格分布 (p90-p10)/p50 粗估波动（分位值单位一致，比值无需换算）。"""
+    items = {it.get("percentValue"): it.get("price") for it in (pdata.get("priceRangeItems") or [])}
+    p10, p50, p90 = items.get(10), items.get(50), items.get(90)
     try:
-        if mn and mx and avg:
-            return round((float(mx) - float(mn)) / float(avg), 3)
+        if p10 and p50 and p90 and float(p50) > 0:
+            return round((float(p90) - float(p10)) / float(p50), 3)
     except Exception:
         pass
     return 0.0
