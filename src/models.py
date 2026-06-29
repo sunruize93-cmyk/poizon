@@ -51,10 +51,15 @@ class Candidate:
     lv: LVProduct
     dewu: DewuProduct
     # —— 利润计算 ——
-    cost_cny: float = 0.0           # 采购总成本（到得物入库）
-    sell_net_cny: float = 0.0       # 得物到手价
-    net_profit_cny: float = 0.0     # 净利润 = 到手价 - 成本
-    margin_rate: float = 0.0        # 利润率 = 净利润 / 成本
+    purchase_cost_cny: float = 0.0  # 采购成本（含退税/券/出口申报，到手KRW→CNY）
+    logistics_cny: float = 0.0      # 物流（中程+顺丰+包装）
+    cost_cny: float = 0.0           # 总成本 = 采购 + 物流
+    sell_net_cny: float = 0.0       # 得物到手价（按选用场景）
+    net_profit_cny: float = 0.0     # 净利润 = 到手价 - 总成本（按选用场景）
+    margin_rate: float = 0.0        # 利润率 = 净利润 / 总成本
+    profit_normal_cny: float = 0.0  # 普通挂单净利
+    profit_instant_cny: float = 0.0 # 立即变现净利
+    sell_scenario: str = ""         # 进榜采用的场景 normal|instant
     # —— 评分 ——
     score: float = 0.0
     subscores: dict = field(default_factory=dict)

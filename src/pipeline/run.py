@@ -104,11 +104,14 @@ def run(demo: bool = False, top: int = 50) -> list:
     if diag["lv_fetch_errors"]:
         print(f"[关联] LV 抓取失败: {diag['lv_fetch_errors']}")
 
+    from ..fx import krw_per_cny
+    fx_rate = krw_per_cny(cfg)
+
     candidates = build_candidates(lv_list, dewu_list)
     for c in candidates:
         c.lv.category = c.lv.category or next(
             (s.get("category", "") for s in skus if s["article_no"] == c.article_no), "")
-        compute_profit(c, cfg)
+        compute_profit(c, cfg, fx_rate)
     candidates = apply_filters(candidates, cfg)
     ranked = score_candidates(candidates, cfg)
 

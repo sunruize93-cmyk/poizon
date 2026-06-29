@@ -19,33 +19,64 @@ from ..models import Candidate
 # --------------------------------------------------------------------------- #
 # 1. 利润计算
 # --------------------------------------------------------------------------- #
-def compute_profit(c: Candidate, cfg: dict) -> Candidate:
-    """按 settings.yaml 的成本参数，填充 c 的 cost / 利润字段。"""
-    fx = cfg["fx"]["krw_to_cny"]
+def _logistics_cny(category: str, lg: dict) -> float:
+    cat = (category or "").lower()
+    key = "shoes" if "shoe" in cat or "鞋" in cat else (
+        "wallet" if "wallet" in cat or "钱包" in cat else (
+            "belt" if "belt" in cat or "皮带" in cat else "default"))
+    rate = lg.get("rate_cny_per_kg", {}).get("shoes" if key == "shoes" else "default", 38)
+    weight = lg.get("weight_kg", {}).get(key, lg.get("weight_kg", {}).get("default", 0.5))
+    return rate * weight + lg.get("sf_express_cny", 50) + lg.get("packaging_cny", 20)
+
+
+def _sell_net(price_cny: float, tech_rate: float, sell: dict) -> float:
+    """得物到手价 = 售价×(1−技术费−转账费) − 操作费 − 邮补 [− 售后无忧]。"""
+    net = price_cny * (1 - tech_rate - sell.get("transfer_fee_rate", 0))
+    net -= sell.get("operation_fee_cny", 0)
+    net -= sell.get("buyer_shipping_subsidy_cny", 0)
+    if sell.get("include_worryfree"):
+        net -= price_cny * sell.get("worryfree_fee_rate", 0)
+    return net
+
+
+def compute_profit(c: Candidate, cfg: dict, krw_per_cny: float | None = None) -> Candidate:
+    """按实测成本表算 采购/物流/双场景利润。krw_per_cny 优先用实时汇率，否则用配置回退。"""
     cost = cfg["cost"]
     sell = cfg["sell"]
+    fx = krw_per_cny or cfg["fx"].get("krw_per_cny", 224)
 
-    # 采购侧：韩国含税价 → 退税后净价 → 折人民币 → 加物流/清关/杂费
-    lv_price_cny = c.lv.price_krw * (1 - cost["vat_refund_rate"]) * fx
-    customs = cost.get("customs_cny", 0) + lv_price_cny * cost.get("customs_rate", 0.0)
-    purchase_cost = (
-        lv_price_cny
-        + cost.get("shipping_cny", 0)
-        + customs
-        + cost.get("handling_cny", 0)
-    )
+    # 采购成本(CNY)：含税价(KRW) × (10/11 − 券率 + 出口申报率) ÷ 汇率
+    factor = (10 / 11) - cost.get("voucher_rate", 0) + cost.get("export_filing_rate", 0)
+    purchase = c.lv.price_krw * factor / fx if c.lv.price_krw and fx else 0.0
+    logistics = _logistics_cny(c.lv.category, cost.get("logistics", {}))
+    total_cost = purchase + logistics
 
-    # 销售侧：得物市场价扣佣金/手续费/固定费 = 到手价
-    gross = c.dewu.market_price_cny
-    sell_net = (
-        gross * (1 - sell.get("platform_fee_rate", 0) - sell.get("transfer_fee_rate", 0))
-        - sell.get("fixed_fee_cny", 0)
-    )
+    price = c.dewu.market_price_cny
+    # 普通挂单：卖市场最低价；立即变现：卖最高求购价(≈市场价×(1−折让))，技术费降至1%
+    net_normal = _sell_net(price, sell.get("tech_fee_rate_normal", 0.05), sell)
+    instant_price = price * (1 - sell.get("instant_bid_discount", 0.06))
+    net_instant = _sell_net(instant_price, sell.get("tech_fee_rate_instant", 0.01), sell)
 
-    c.cost_cny = round(purchase_cost, 2)
-    c.sell_net_cny = round(sell_net, 2)
-    c.net_profit_cny = round(sell_net - purchase_cost, 2)
-    c.margin_rate = round(c.net_profit_cny / purchase_cost, 4) if purchase_cost > 0 else 0.0
+    c.purchase_cost_cny = round(purchase, 2)
+    c.logistics_cny = round(logistics, 2)
+    c.cost_cny = round(total_cost, 2)
+    c.profit_normal_cny = round(net_normal - total_cost, 2)
+    c.profit_instant_cny = round(net_instant - total_cost, 2)
+
+    pref = sell.get("prefer_scenario", "best")
+    if pref == "normal":
+        chosen, scen, snet = c.profit_normal_cny, "normal", net_normal
+    elif pref == "instant":
+        chosen, scen, snet = c.profit_instant_cny, "instant", net_instant
+    else:
+        if c.profit_instant_cny > c.profit_normal_cny:
+            chosen, scen, snet = c.profit_instant_cny, "instant", net_instant
+        else:
+            chosen, scen, snet = c.profit_normal_cny, "normal", net_normal
+    c.sell_scenario = scen
+    c.sell_net_cny = round(snet, 2)
+    c.net_profit_cny = chosen
+    c.margin_rate = round(chosen / total_cost, 4) if total_cost > 0 else 0.0
     return c
 
 
