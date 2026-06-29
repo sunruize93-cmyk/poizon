@@ -9,6 +9,15 @@ report/*.xlsx
 report/*.csv
 report/*.html
 
+# node / 浏览器自动化
+node_modules/
+tools/.auth.json
+tools/.login_done
+tools/.secrets.json
+tools/_*.png
+tools/_*.txt
+tools/_*.mjs
+
 # python
 .venv/
 __pycache__/

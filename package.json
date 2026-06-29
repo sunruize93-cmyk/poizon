@@ -1,0 +1,28 @@
+{
+  "name": "poizon-xuanpin",
+  "version": "1.0.0",
+  "description": "LV 韩国直邮 → 得物（POIZON）跨境套利**选品系统**。",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sunruize93-cmyk/poizon-xuanpin.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/sunruize93-cmyk/poizon-xuanpin/issues"
+  },
+  "homepage": "https://github.com/sunruize93-cmyk/poizon-xuanpin#readme",
+  "type": "module",
+  "dependencies": {
+    "dotenv": "^17.4.2",
+    "playwright": "^1.61.1"
+  }
+}

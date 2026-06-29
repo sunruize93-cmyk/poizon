@@ -58,12 +58,11 @@ def fetch_real(skus: list[dict]) -> "tuple[list[LVProduct], list[DewuProduct]]":
     print(f"[LV] 抓取 {len(article_nos)} 个货号 ...")
     lv_list = LVClient().fetch_many(article_nos)
 
-    # 得物：优先官方 API；行情接口未接通时退化为屏幕控制占位
-    print("[得物] 取行情 ...")
-    from ..dewu_source.screen_control import ScreenControlSource
-    src = ScreenControlSource()
-    name_by_no = {s["article_no"]: s.get("name", "") for s in skus}
-    dewu_list = [src.fetch(a, name_by_no.get(a, "")) for a in article_nos]
+    # 得物：官方 API（货号→行情+销量），已验证可用
+    print("[得物] 官方 API 取行情+销量 ...")
+    from ..dewu_source.official_api import DewuOfficialClient
+    client = DewuOfficialClient()
+    dewu_list = [client.fetch_product(a, region="KR", currency="CNY") for a in article_nos]
     return lv_list, dewu_list
 
 
