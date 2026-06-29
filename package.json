@@ -23,6 +23,7 @@
   "type": "module",
   "dependencies": {
     "dotenv": "^17.4.2",
+    "patchright": "^1.61.1",
     "playwright": "^1.61.1"
   }
 }

@@ -27,3 +27,5 @@ __pycache__/
 # 系统
 .DS_Store
 tools/_*.json
+tools/.lv_auth.json
+tools/.lv_profile/
