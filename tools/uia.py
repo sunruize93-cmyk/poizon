@@ -44,6 +44,22 @@ def key(code):
     _post(Quartz.CGEventCreateKeyboardEvent(None, int(code), False))
 
 
+def key_combo(code, cmd=False, shift=False, opt=False):
+    flags = 0
+    if cmd: flags |= Quartz.kCGEventFlagMaskCommand
+    if shift: flags |= Quartz.kCGEventFlagMaskShift
+    if opt: flags |= Quartz.kCGEventFlagMaskAlternate
+    d = Quartz.CGEventCreateKeyboardEvent(None, int(code), True)
+    Quartz.CGEventSetFlags(d, flags); _post(d); time.sleep(0.04)
+    u = Quartz.CGEventCreateKeyboardEvent(None, int(code), False)
+    Quartz.CGEventSetFlags(u, flags); _post(u)
+
+
+def move(x, y):
+    pt = Quartz.CGPointMake(float(x), float(y))
+    _post(Quartz.CGEventCreateMouseEvent(None, Quartz.kCGEventMouseMoved, pt, 0)); time.sleep(0.05)
+
+
 def scroll(dy):
     e = Quartz.CGEventCreateScrollWheelEvent(None, Quartz.kCGScrollEventUnitPixel, 1, int(dy))
     _post(e)
@@ -78,10 +94,14 @@ def run_seq(seq):
             type_text(arg)
         elif op == "key":
             key(arg)
+        elif op == "cmd":          # cmd+<keycode>，如 cmd 0 = Cmd+A 全选
+            key_combo(arg, cmd=True)
         elif op == "sleep":
             time.sleep(float(arg))
         elif op == "shot":
             shot(arg)
+        elif op == "move":
+            x, y = arg.split(); move(x, y)
         elif op == "scroll":
             scroll(arg)
         print(f"  · {cmd}")
