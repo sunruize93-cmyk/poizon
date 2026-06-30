@@ -11,3 +11,6 @@ pandas>=2.0.0
 openpyxl>=3.1.0
 # 重试 / 限频
 tenacity>=8.2.0
+# 得物截图本地 OCR（省 token，替代把整屏图喂给模型）：macOS Vision 框架
+pyobjc-framework-Vision>=10.0
+pyobjc-framework-Quartz>=10.0

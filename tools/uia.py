@@ -2,8 +2,10 @@
 坐标用「逻辑点」(=截图像素/backingScale)。用法：
   python tools/uia.py size                      # 打印显示点尺寸 + 截图像素
   python tools/uia.py do "act;click 1047 212;sleep .6;type M4583;key 36;sleep 3;shot /tmp/s.png"
-命令：act(激活得物) click X Y  type TEXT  key CODE  sleep S  shot PATH  scroll DY
+命令：act click X Y  type TEXT  key CODE  cmd CODE  move X Y  sleep S  scroll DY
+      shot PATH(全屏)  vshot PATH(裁得物窗+降采样,省token)  ocr(本地OCR→文本,读数据零图片token)
 """
+import os
 import subprocess
 import sys
 import time
@@ -69,6 +71,29 @@ def shot(path):
     subprocess.run(["screencapture", "-x", path], capture_output=True)
 
 
+# 得物窗口在屏幕左半（points）。只截它能去掉右侧终端噪声、省一半以上 token。
+# 宽 800（≈显示 1060px）刚好在终端左缘内侧，避免终端文字混入。
+DEWU_REGION = "0,0,800,870"
+
+
+def vshot(path, region=DEWU_REGION):
+    """裁到得物窗口并降采样：需要看版面找点击目标时用，比全屏截图省 token。"""
+    subprocess.run(["screencapture", "-x", f"-R{region}", path], capture_output=True)
+    subprocess.run(["sips", "-Z", "1200", path], capture_output=True)
+
+
+def ocr(region=DEWU_REGION):
+    """截得物窗口→本地 Vision OCR→打印文本行。读购买记录/属性用它，零图片 token。"""
+    tmp = "/tmp/_ocr.png"
+    subprocess.run(["screencapture", "-x", f"-R{region}", tmp], capture_output=True)
+    here = os.path.dirname(os.path.abspath(__file__))
+    out = subprocess.run([sys.executable, os.path.join(here, "ocr.py"), tmp],
+                         capture_output=True, text=True)
+    print(out.stdout, end="")
+    if out.stderr.strip():
+        print(out.stderr, end="")
+
+
 def size():
     b = Quartz.CGDisplayBounds(Quartz.CGMainDisplayID())
     print(f"display points: {int(b.size.width)} x {int(b.size.height)}")
@@ -100,6 +125,10 @@ def run_seq(seq):
             time.sleep(float(arg))
         elif op == "shot":
             shot(arg)
+        elif op == "vshot":
+            vshot(arg)
+        elif op == "ocr":
+            ocr(arg) if arg else ocr()
         elif op == "move":
             x, y = arg.split(); move(x, y)
         elif op == "scroll":
