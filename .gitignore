@@ -29,4 +29,5 @@ __pycache__/
 tools/_*.json
 tools/.lv_auth.json
 tools/.lv_profile/
+tools/.lv_profile_fresh/
 tools/.dewu_profile/
