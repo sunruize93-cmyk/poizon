@@ -1,30 +1,26 @@
 import { chromium } from 'patchright';
+import 'dotenv/config';
 import fs from 'fs';
-const ART = process.argv[2] || 'M80726';
-// patchright 推荐：persistent context + 默认UA + 不加自动化args
-const ctx = await chromium.launchPersistentContext('tools/.lv_profile', {
-  headless: false, viewport: null, locale: 'ko-KR', timezoneId: 'Asia/Seoul',
-});
-const page = ctx.pages()[0] || await ctx.newPage();
-const hits = [];
-page.on('response', async (r) => { try { const u=r.url(); if(!/louisvuitton/i.test(u))return;
+const m = (process.env.LV_PROXY||'').match(/^https?:\/\/([^:]+):([^@]+)@([^:]+):(\d+)$/);
+const proxy = m ? { server:`http://${m[3]}:${m[4]}`, username:m[1], password:m[2] } : undefined;
+console.log('proxy:', proxy && proxy.server);
+const PURL = process.argv[2] || 'https://kr.louisvuitton.com/kor-kr/products/multiple-wallet-taiga-leather-nvprod1420109v/M30295';
+const ctx = await chromium.launchPersistentContext('tools/.lv_profile', { headless:false, viewport:null, locale:'ko-KR', timezoneId:'Asia/Seoul', proxy });
+const page = ctx.pages()[0]||await ctx.newPage();
+const jsons=[];
+page.on('response', async r=>{ try{ const u=r.url(); if(!/louisvuitton|pass-api/i.test(u))return;
   const ct=r.headers()['content-type']||''; if(!ct.includes('json'))return; let b; try{b=await r.text();}catch{return;}
-  if(/price|stock|sellable|availab|product|catalog|search|won|krw/i.test(b+u)) hits.push({status:r.status(),url:u.slice(0,120),snip:b.slice(0,200)});
-}catch{} });
-console.log('→ homepage');
-await page.goto('https://kr.louisvuitton.com/kor-kr/homepage',{waitUntil:'domcontentloaded',timeout:60000}).catch(e=>console.log(' warn',e.message.split('\n')[0]));
-await page.waitForTimeout(6000);
-await page.screenshot({path:'tools/_lv2_home.png'});
-const denied1 = (await page.content()).includes('Access denied')||(await page.content()).includes('Accès refusé');
-console.log('homepage denied?', denied1, 'title:', await page.title());
-if(!denied1){
-  await page.goto(`https://kr.louisvuitton.com/kor-kr/search/${ART}`,{waitUntil:'networkidle',timeout:60000}).catch(e=>console.log(' warn',e.message.split('\n')[0]));
-  await page.waitForTimeout(5000);
-  await page.screenshot({path:'tools/_lv2_search.png'});
-  const links = await page.evaluate(()=>[...document.querySelectorAll('a[href]')].map(a=>a.getAttribute('href')).filter(h=>h&&/\/products\/|nvprod/i.test(h)).slice(0,6));
-  console.log('product links:', links);
-}
-await ctx.storageState({path:'tools/.lv_auth.json'}).catch(()=>{});
-fs.writeFileSync('tools/_lv_hits.json',JSON.stringify(hits,null,1));
-console.log('json XHR:',hits.length); for(const h of hits.slice(0,15)) console.log(h.status,h.url,'|',h.snip.replace(/\s+/g,' ').slice(0,100));
+  jsons.push({status:r.status(),url:u,len:b.length,body:b}); }catch{} });
+const denied=async()=>{const c=await page.content();return c.includes('Access denied')||c.includes('Accès refusé');};
+console.log('→ homepage'); await page.goto('https://kr.louisvuitton.com/kor-kr/homepage',{waitUntil:'domcontentloaded',timeout:60000}).catch(e=>console.log(' warn',e.message.split('\n')[0]));
+await page.waitForTimeout(5000); console.log(' homepage denied?', await denied(), 'title:', await page.title());
+await page.mouse.move(500,400); await page.waitForTimeout(2000);
+console.log('→ product', PURL); await page.goto(PURL,{waitUntil:'networkidle',timeout:60000}).catch(e=>console.log(' warn',e.message.split('\n')[0]));
+await page.waitForTimeout(7000); console.log(' product denied?', await denied(), 'url:', page.url());
+await page.screenshot({path:'tools/_lvp.png'});
+const price=await page.evaluate(()=>{const m=document.body.innerText.match(/[\d,]{6,}\s*(원|₩|KRW)/);return m?m[0]:null;});
+console.log(' visible price:', price, ' nvprod:', (page.url().match(/nvprod\w+/)||[])[0]);
+fs.writeFileSync('tools/_lvp_full.json', JSON.stringify(jsons,null,1));
+console.log('--- json XHR:', jsons.length, '---');
+for(const j of jsons) console.log(j.status, j.url.slice(0,120), 'len='+j.len, '|', j.body.slice(0,80).replace(/\s+/g,' '));
 await ctx.close();

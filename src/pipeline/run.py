@@ -52,11 +52,24 @@ def fetch_real(skus: list[dict]) -> "tuple[list[LVProduct], list[DewuProduct]]":
     from dotenv import load_dotenv
     load_dotenv(os.path.join(ROOT, ".env"))
 
-    from ..lv_scraper.client import LVClient
+    from datetime import datetime, timezone
+    from ..models import LVProduct
     article_nos = [s["article_no"] for s in skus]
 
-    print(f"[LV] 抓取 {len(article_nos)} 个货号 ...")
-    lv_list = LVClient().fetch_many(article_nos)
+    # LV 价：优先用 skus.csv 的 lv_price_krw（手填模式，已知稳定价）；缺失则抓官网
+    now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    manual = {s["article_no"]: s for s in skus if (s.get("lv_price_krw") or "").strip()}
+    scrape_nos = [a for a in article_nos if a not in manual]
+    lv_list = [LVProduct(article_no=a, name=manual[a].get("name", ""),
+                         category=manual[a].get("category", ""),
+                         price_krw=float(manual[a]["lv_price_krw"]), sellable=True,
+                         fetched_at=now) for a in manual]
+    if scrape_nos:
+        from ..lv_scraper.client import LVClient
+        print(f"[LV] 抓取 {len(scrape_nos)} 个货号（其余 {len(manual)} 个用手填价）...")
+        lv_list += LVClient().fetch_many(scrape_nos)
+    else:
+        print(f"[LV] 全部 {len(manual)} 个用手填价（skus.csv lv_price_krw）")
 
     # 得物：官方 API（货号→行情+销量），已验证可用
     print("[得物] 官方 API 取行情+销量 ...")
