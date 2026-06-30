@@ -51,3 +51,25 @@ scoring:
     min_abs_profit_cny: 80
     min_margin_rate: 0.08
     require_lv_sellable: true
+
+  # ===== 逐(码数×包装)「近期好卖 × 利润」综合模型（tools/run_sales.py 用）=====
+  # 设计：先硬过滤(不赚钱/滞销直接淘汰)，再按三大维度加权综合。所有分项归一化为「越大越好」。
+  #   流动性/热度 0.45：能否快速卖出——本场景第一优先(用户强调近期好卖)
+  #   盈利性     0.40：赚多少(绝对净利)与回报率(利润率)
+  #   风险       0.15：竞争与价格波动(负向，越低越好)
+  heat:
+    weights:
+      velocity:    0.20   # 月化成交速度——最强的「卖得动」信号
+      recency:     0.12   # 距最近成交天数(越近越好)——确认活跃需求、非陈货
+      wish:        0.07   # 想要人数——潜在需求深度
+      buyers:      0.06   # 累计买家数——已验证的成交基础
+      profit_abs:  0.22   # 绝对净利¥——单件是否值得做、占用资金的产出
+      margin:      0.18   # 利润率——占用资金的回报率(资金效率)
+      competition: 0.08   # 竞价商家数(负向)——卖家越多越卷、易压价
+      volatility:  0.07   # 成交价区间/中位(负向)——实际成交价的不确定性
+    filters:
+      min_abs_profit_cny: 100   # 净利下限(取最优场景)
+      min_margin_rate: 0.06     # 利润率下限
+      min_sales_90d: 1          # 90天至少成交1笔，否则判滞销淘汰
+    recency_full_days: 1        # 距今≤此天数 recency=1(满分)
+    recency_zero_days: 60       # 距今≥此天数 recency=0
