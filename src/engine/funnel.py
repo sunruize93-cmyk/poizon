@@ -10,15 +10,22 @@ from .base import SourceAdapter, MarketAdapter, PotentialJudge, BrandProfile, Ra
 
 
 def run(profile: BrandProfile, source: SourceAdapter, judge: PotentialJudge,
-        market: "MarketAdapter | None" = None, do_price: bool = True, verbose: bool = True):
+        market: "MarketAdapter | None" = None, do_price: bool = True,
+        llm_scores: "dict | None" = None, verbose: bool = True):
     log = print if verbose else (lambda *a, **k: None)
 
     # Layer0 发现
     raw = source.discover(profile)
     log(f"[L0 发现] {source.name} 目录 {len(raw)} 品")
 
-    # Layer1 潜力初判（规则+LLM）
+    # Layer1 潜力初判（规则 + 可选 LLM 精排回填）
     judged = judge.judge(raw, profile)
+    if llm_scores:
+        from .judge import HybridJudge
+        HybridJudge.apply_llm_scores(judged, llm_scores)
+        for it in judged:
+            it.keep = it.potential >= 0.5
+        log(f"[L1 LLM] 回填精排分 {len(llm_scores)} 项")
     kept = [it for it in judged if it.keep]
     log(f"[L1 初判] 潜力≥阈值 {len(kept)} / {len(judged)}  （砍掉 {len(judged) - len(kept)}）")
     cap = profile.layer_caps.get("price", 200)

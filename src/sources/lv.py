@@ -19,6 +19,9 @@ PRICES = "data/lv_prices.json"
 class LVSource:
     name = "LV"
 
+    def __init__(self, live: bool = True):
+        self.live = live   # False = 只读 data/lv_prices.json 缓存，不起浏览器
+
     def discover(self, profile: BrandProfile) -> list[RawItem]:
         if not os.path.exists(CATALOG):
             raise FileNotFoundError(f"{CATALOG} 不存在，先跑 python tools/lv_catalog.py")
@@ -32,8 +35,10 @@ class LVSource:
             ))
         return items
 
-    def price(self, items: list[RawItem], run: bool = True) -> list[Priced]:
+    def price(self, items: list[RawItem], run: bool | None = None) -> list[Priced]:
         """抓供给价。run=True 时实跑浏览器；否则只读已有 data/lv_prices.json 缓存。"""
+        if run is None:
+            run = self.live
         arts = [it.article_no for it in items]
         if run and arts:
             # 每次全新 profile 名，避开 Akamai 的 profile 级封禁
