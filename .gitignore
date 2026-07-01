@@ -28,6 +28,5 @@ __pycache__/
 .DS_Store
 tools/_*.json
 tools/.lv_auth.json
-tools/.lv_profile/
-tools/.lv_profile_fresh/
+tools/.lv_profile*
 tools/.dewu_profile/
