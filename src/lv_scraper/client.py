@@ -1,23 +1,26 @@
-"""LV 韩国官网抓取：按货号取价格(KRW) + 是否可售。
+"""LV 韩国官网抓取：按货号取价格(KRW) + 是否可售 + 逐规格。
 
-走 LV 移动 App 的内部接口，不爬网页（网页有 Akamai，直连 403）。
-  GET https://pass-api.louisvuitton.com/api/catalog/product/{货号}?locale=ko_KR
+真实接口（2026-07 实测确认，旧 pass-api 已失效）：
+  GET https://api.louisvuitton.com/eco-as/lvcom-prodct-dtl-eapi/v2/products/kor-kr/skus/{货号}?productId={nvprodId}
+  → 200, JSON 约 13KB。关键字段：
+      priceRaw      3040000        价格(KRW，干净整数；另有 price="₩ 3.040.000,00" 带格式)
+      currency      KRW
+      sellable      true           是否可线上下单
+      backOrder     false          是否缺货预订
+      backInStock   true
+      name/color/macroColor/material
+      skus[]        规格数组，每项 {skuId, color, size?, priceRaw, sellable, url}
 
-关键字段（来自移动 App 接口逆向）：
-  sellableStatus.price.price   价格
-  sellableStatus.sellable      是否可线上下单
-  isBackOrder                  是否可缺货预订
-  skus[]                       规格：skuId / color / size
+⚠️ 传输层现实（实测）：此接口在 Akamai Bot Manager 之后。**纯 curl_cffi 直连必 403**
+   （TLS 指纹能过，但缺浏览器 sensor 生成的 _abck cookie）。可行取数方式二选一：
+     A. 浏览器直取（推荐）：patchright 真人化站内导航进 PDP，拦截本接口响应 → 见 tools/lv_extract.mjs。
+        绕 Akamai 关键：①全新 profile（旧 profile 会被标记）②不深链 goto，从首页点商品卡进 PDP。
+     B. cookie 收割回放：浏览器解 Akamai 后取 _abck/bm_sz + SLAS guest token(usid)，注入下方
+        LVClient(cookies=...) 走 curl_cffi 快批；cookie 过期需重刷。
+   本模块的 _parse() 两种方式通用（把接口 JSON → LVProduct）。
 
-反爬要点：
-  - 用 curl_cffi 的 impersonate 伪装真实 TLS/JA3 指纹（requests 会被 Akamai 拦）。
-  - 走韩国住宅代理（机房 IP 直接封）。
-  - 控制频率 + 随机间隔，避免行为分析触发。
-
-⚠️ 待真机抓包确认（见 docs/方案.md 阶段 2）：
-  - locale 拼写 ko_KR vs kor_KR
-  - pass-api 当前是否仍在线、韩国是否同一 host
-  - 是否需要额外 client_id / client_secret 头
+待办：货号→nvprodId(=productId) 解析（PDP URL 形如 .../{slug}-{nvprodId}/{货号}），
+   大概率走站内搜索接口；productId 是否必填也待验证。见 docs/方案.md。
 """
 from __future__ import annotations
 
@@ -34,13 +37,13 @@ try:
 except ImportError:  # 允许在未安装依赖时导入本模块（骨架阶段）
     cffi_requests = None
 
-PASS_API = "https://pass-api.louisvuitton.com/api/catalog/product/{article}"
-LOCALE = "ko_KR"            # 韩国；待抓包确认拼写
-IMPERSONATE = "safari17_0"  # curl_cffi 伪装目标，对应 iOS App 的 TLS 指纹
+PRODUCT_API = "https://api.louisvuitton.com/eco-as/lvcom-prodct-dtl-eapi/v2/products/kor-kr/skus/{article}"
+LOCALE = "kor-kr"           # 韩国区 locale（实测路径段用 kor-kr）
+IMPERSONATE = "chrome131"   # curl_cffi 伪装目标（回放路径用；须配浏览器 cookie 才可能过 Akamai）
 DEFAULT_HEADERS = {
-    "User-Agent": "LVapp/ios/6.40.1.17199 LVApp PRD",
     "Accept": "application/json",
-    "Host": "pass-api.louisvuitton.com",
+    "Referer": "https://kr.louisvuitton.com/",
+    "Accept-Language": "ko-KR,ko;q=0.9",
 }
 
 
@@ -49,12 +52,14 @@ class LVRetryable(Exception):
 
 
 class LVClient:
-    def __init__(self, proxy: str | None = None, locale: str = LOCALE,
+    def __init__(self, proxy: str | None = None, cookies: dict | None = None,
                  min_interval: float = 1.5):
+        """cookies：从浏览器会话收割的 Akamai/SLAS cookie（_abck/bm_sz/usid…）。
+        没有它 curl_cffi 直连必被 Akamai 403 —— 见模块 docstring 的取数方式 A/B。"""
         if cffi_requests is None:
             raise RuntimeError("curl_cffi 未安装，请 pip install -r requirements.txt")
         self.proxy = proxy or os.getenv("LV_PROXY")
-        self.locale = locale
+        self.cookies = cookies or {}
         self.min_interval = min_interval   # 两次请求最小间隔（秒）
         self._last = 0.0
         self._session = cffi_requests.Session(impersonate=IMPERSONATE)
@@ -71,53 +76,57 @@ class LVClient:
         wait=wait_exponential(multiplier=2, min=2, max=30),
         reraise=True,
     )
-    def _get(self, article: str) -> dict:
+    def _get(self, article: str, product_id: str | None = None) -> dict:
         self._throttle()
-        url = PASS_API.format(article=article)
+        url = PRODUCT_API.format(article=article)
+        params = {"productId": product_id} if product_id else {}
         proxies = {"http": self.proxy, "https": self.proxy} if self.proxy else None
         resp = self._session.get(
-            url, params={"locale": self.locale},
-            headers=DEFAULT_HEADERS, proxies=proxies, timeout=20,
+            url, params=params, headers=DEFAULT_HEADERS,
+            cookies=self.cookies, proxies=proxies, timeout=20,
         )
         if resp.status_code in (429, 500, 502, 503, 504):
             raise LVRetryable(f"{resp.status_code} for {article}")
         if resp.status_code == 403:
-            # Akamai 拦截：通常是 TLS 指纹/IP 问题，重试无意义，直接报
-            raise RuntimeError(f"403 被 Akamai 拦截（检查代理/impersonate）: {article}")
+            # Akamai 拦截：cookie 缺失/过期。重试无意义，需重新用浏览器收割 cookie。
+            raise RuntimeError(f"403 被 Akamai 拦截（_abck cookie 缺失/过期，需浏览器重取）: {article}")
         resp.raise_for_status()
         return resp.json()
 
-    def fetch(self, article_no: str) -> LVProduct:
+    def fetch(self, article_no: str, product_id: str | None = None) -> LVProduct:
         """抓单个货号。失败时返回带 error 的 LVProduct，不抛出，便于批量容错。"""
         now = datetime.now(timezone.utc).isoformat(timespec="seconds")
         try:
-            data = self._get(article_no)
+            data = self._get(article_no, product_id)
         except Exception as e:  # noqa: BLE001  批量抓取需要逐个容错
             return LVProduct(article_no=article_no, fetched_at=now, error=str(e))
 
         return self._parse(article_no, data, now)
 
     @staticmethod
-    def _parse(article_no: str, data: dict, fetched_at: str) -> LVProduct:
-        status = data.get("sellableStatus", {}) or {}
-        price = (status.get("price") or {}).get("price", 0) or 0
+    def parse(article_no: str, data: dict, fetched_at: str = "") -> LVProduct:
+        """eco-as 商品详情 JSON → LVProduct。浏览器拦截的响应也可直接喂进来复用。"""
         variants = []
         for sku in data.get("skus", []) or []:
             variants.append(LVVariant(
                 sku_id=str(sku.get("skuId", "")),
                 color=sku.get("color", "") or "",
-                size=sku.get("size", "") or "",
+                size=str(sku.get("size", "") or ""),
                 sellable=bool(sku.get("sellable", False)),
             ))
         return LVProduct(
             article_no=article_no,
-            name=data.get("name", "") or data.get("title", "") or "",
-            price_krw=float(price),
-            sellable=bool(status.get("sellable", False)),
-            is_backorder=bool(data.get("isBackOrder", False)),
+            name=data.get("name", "") or "",
+            category=data.get("product_category", "") or "",
+            price_krw=float(data.get("priceRaw", 0) or 0),   # 干净整数 KRW
+            sellable=bool(data.get("sellable", False)),
+            is_backorder=bool(data.get("backOrder", False)),
             variants=variants,
             fetched_at=fetched_at,
         )
+
+    # 向后兼容旧内部调用名
+    _parse = parse
 
     def fetch_many(self, article_nos: list[str]) -> list[LVProduct]:
         return [self.fetch(a) for a in article_nos]
