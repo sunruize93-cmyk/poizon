@@ -44,7 +44,8 @@ def main():
             cfg_path = os.path.join(root, "config", "settings.example.yaml")
         cfg = yaml.safe_load(open(cfg_path, encoding="utf-8"))
         fx = krw_per_cny(cfg)
-        llm = json.load(open("data/lv_llm_scores.json")).get("scores", {}) if os.path.exists("data/lv_llm_scores.json") else None
+        sf = "data/lv_llm_scores_full.json" if os.path.exists("data/lv_llm_scores_full.json") else "data/lv_llm_scores.json"
+        llm = json.load(open(sf)).get("scores", {}) if os.path.exists(sf) else None
         res = funnel.run(profile, LVSource(live=args.price_live), HybridJudge(),
                          market=DewuMarket(cfg, fx), do_price=True, llm_scores=llm)
         ops = res["opportunities"]
@@ -66,13 +67,18 @@ def main():
             it.potential, it.potential_reason = c["potential"], c["reason"]
         scores = json.load(open(args.apply)).get("scores", {})
         HybridJudge.apply_llm_scores(items, scores)
+        # 变体去重：同款折叠，喂 L2 的 shortlist 不含重复配色
+        from src.engine.funnel import _dedup_by_style
+        hi = [it for it in items if it.potential >= 0.6]
+        deduped, collapsed = _dedup_by_style(hi, profile.per_style_cap)
+        print(f"（去重：{len(hi)}→{len(deduped)} 款代表，折叠 {collapsed} 个同款变体）")
         short = [{"article_no": it.article_no, "category": it.category, "name": it.name,
                   "potential": it.potential, "reason": it.potential_reason,
-                  "nvprod": it.source_id} for it in items if it.potential >= 0.6]
+                  "nvprod": it.source_id} for it in deduped]
         json.dump({"count": len(short), "items": short}, open("data/lv_shortlist.json", "w"),
                   ensure_ascii=False, indent=1)
-        print(f"精排后 shortlist（potential≥0.6）{len(short)} 品，Top20:")
-        for it in items[:20]:
+        print(f"精排后 shortlist（去重后 {len(short)} 款）Top20:")
+        for it in deduped[:20]:
             print(f"  {it.potential:.2f}  {it.article_no:8} {it.category:6} {it.name[:34]:34} {it.potential_reason[-40:]}")
         print(f"\n✓ shortlist → data/lv_shortlist.json（下一步喂 Layer2 抓价）")
         return

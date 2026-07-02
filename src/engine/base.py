@@ -119,4 +119,6 @@ class BrandProfile:
     # 漏斗每层预算上限（进入下一层的最大数量），控制成本
     layer_caps: dict[str, int] = field(default_factory=lambda: {
         "price": 200, "signal": 80, "verify": 25})
+    # 每款保留几个配色变体去报价（LV 同款不同色价格基本一致，无需全抓）。0=不去重
+    per_style_cap: int = 2
     cost_cfg: dict = field(default_factory=dict)   # 成本模型参数（喂 scorer）

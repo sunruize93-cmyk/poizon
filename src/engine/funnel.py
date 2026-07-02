@@ -6,7 +6,35 @@ Layer0-2（发现/初判/报价）可全自动；Layer3-4（得物信号/成交�
 """
 from __future__ import annotations
 
+import re
+from collections import defaultdict
+
 from .base import SourceAdapter, MarketAdapter, PotentialJudge, BrandProfile, RawItem
+
+
+def _style_key(name: str) -> str:
+    """款式键：折叠同款不同色。去掉常见颜色/材质词后归一化。"""
+    s = name.lower()
+    colors = (r"monogram|damier|empreinte|eclipse|noir|black|white|blanc|blue|bleu|beige|"
+              r"brown|marron|grey|gris|green|vert|red|rouge|pink|rose|taupe|navy|khaki|"
+              r"leather|calf|taurillon|epi|nylon|denim|canvas|other|autres|g\d{2}|l\b|s00")
+    s = re.sub(colors, " ", s)
+    return re.sub(r"\s+", " ", s).strip()
+
+
+def _dedup_by_style(items: list[RawItem], cap: int) -> tuple[list[RawItem], int]:
+    """每款只保留潜力最高的 cap 个变体去报价。返回(去重后, 折叠掉的数量)。"""
+    if cap <= 0:
+        return items, 0
+    groups: dict[str, list[RawItem]] = defaultdict(list)
+    for it in items:
+        groups[_style_key(it.name)].append(it)
+    kept = []
+    for g in groups.values():
+        g.sort(key=lambda x: x.potential, reverse=True)
+        kept.extend(g[:cap])
+    kept.sort(key=lambda x: x.potential, reverse=True)
+    return kept, len(items) - len(kept)
 
 
 def run(profile: BrandProfile, source: SourceAdapter, judge: PotentialJudge,
@@ -28,8 +56,12 @@ def run(profile: BrandProfile, source: SourceAdapter, judge: PotentialJudge,
         log(f"[L1 LLM] 回填精排分 {len(llm_scores)} 项")
     kept = [it for it in judged if it.keep]
     log(f"[L1 初判] 潜力≥阈值 {len(kept)} / {len(judged)}  （砍掉 {len(judged) - len(kept)}）")
+    # 变体去重：同款不同色折叠，每款留 per_style_cap 个代表去报价（省 L2 调用）
+    deduped, collapsed = _dedup_by_style(kept, profile.per_style_cap)
+    if collapsed:
+        log(f"[L1 去重] 按款折叠掉 {collapsed} 个同款变体 → {len(deduped)} 款代表（每款≤{profile.per_style_cap}）")
     cap = profile.layer_caps.get("price", 200)
-    to_price = kept[:cap]
+    to_price = deduped[:cap]
     log(f"[L1→L2] 取潜力 Top{len(to_price)} 进报价（cap={cap}）")
 
     # Layer2 供给报价
