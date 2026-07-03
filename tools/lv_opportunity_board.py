@@ -21,6 +21,10 @@ cfg = yaml.safe_load(open("config/settings.example.yaml", encoding="utf-8"))
 if os.path.exists("config/settings.yaml"):
     cfg = yaml.safe_load(open("config/settings.yaml", encoding="utf-8"))
 fx = krw_per_cny(cfg)
+# 额外买入折扣(券/会员/免税叠加,除VAT退税外)。LV_DISCOUNT=0.15 表示再省15%。
+extra_disc = float(os.getenv("LV_DISCOUNT", "0"))
+if extra_disc:
+    cfg["cost"]["voucher_rate"] = cfg["cost"].get("voucher_rate", 0.03) + extra_disc
 
 demand = {r["article_no"]: r for r in json.load(open("data/lv_demand_shortlist.json"))["rows"]}
 prices = json.load(open("data/lv_prices.json")).get("results", {}) if os.path.exists("data/lv_prices.json") else {}
