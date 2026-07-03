@@ -66,21 +66,25 @@ prof = [r for r in rows if r["net_cny"] > 0]
 # 机会分保留为归一化综合分(次要参考,含毛利/利润率/需求)。
 for r in prof:
     r["month_profit"] = round(r["net_cny"] * r["cn_sold"])
+# 权重(量化测算标准):需求0.40 + 净利0.35 + 利润率0.25。各项=权重×min-max归一化,拆开存,便于榜单展示。
+W_DEMAND, W_NET, W_MARGIN = 0.40, 0.35, 0.25
 if prof:
     mx_sold = max(r["cn_sold"] for r in prof) or 1
     mx_net = max(r["net_cny"] for r in prof) or 1
     mx_mg = max(r["margin"] for r in prof) or 1
     for r in prof:
-        r["opp"] = round(0.40 * (r["cn_sold"] / mx_sold) + 0.35 * (r["net_cny"] / mx_net)
-                         + 0.25 * (r["margin"] / mx_mg), 3)
-    prof.sort(key=lambda r: r["month_profit"], reverse=True)
+        r["s_demand"] = round(W_DEMAND * (r["cn_sold"] / mx_sold), 3)
+        r["s_net"] = round(W_NET * (r["net_cny"] / mx_net), 3)
+        r["s_margin"] = round(W_MARGIN * (r["margin"] / mx_mg), 3)
+        r["opp"] = round(r["s_demand"] + r["s_net"] + r["s_margin"], 3)
+    prof.sort(key=lambda r: r["opp"], reverse=True)
 
 print(f"参与计算 {len(rows)} 款(有LV价+得物价) | 盈利 {len(prof)} 款 | 汇率1CNY={fx:.0f}KRW")
 print("(销量=得物款级『过去30天』动销,权威字段;非App『最近购买』累计数)\n")
-print("★ LV 机会榜(按月利润潜力=净利×30天销量 排序):")
-print(" 月利润潜力 30天销量 韩卖 净利¥ 利润率 机会分 品类  LV韩价₩  得物¥ 货号     名称")
+print("★ LV 机会榜(按总分=需求0.40+净利0.35+利润率0.25 降序):")
+print(" 总分  需求分 净利分 利润率分 30天销量 净利¥ 利润率 月利润潜力 货号     名称")
 for r in prof[:25]:
-    print(f" {r['month_profit']:>8.0f} {r['cn_sold']:>5} {r['kr_sold']:>3} {r['net_cny']:>6.0f} {r['margin']:>5.0%} {r['opp']:.3f} {str(r['cat'])[:4]:4} {r['lv_krw']:>8} {r['dewu_cn_cny']:>6.0f} {r['article_no']:8} {r['title'][:18]}")
+    print(f" {r['opp']:.3f} {r['s_demand']:.3f} {r['s_net']:.3f} {r['s_margin']:.3f}  {r['cn_sold']:>5} {r['net_cny']:>6.0f} {r['margin']:>5.0%} {r['month_profit']:>8.0f} {r['article_no']:8} {r['title'][:18]}")
 
 rows.sort(key=lambda r: r["net_cny"], reverse=True)
 json.dump({"count": len(prof), "profitable": prof, "all_computed": rows},

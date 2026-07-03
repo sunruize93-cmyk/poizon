@@ -21,18 +21,20 @@ if os.path.exists("config/settings.yaml"):
     cfg = yaml.safe_load(open("config/settings.yaml", encoding="utf-8"))
 fx = krw_per_cny(cfg)
 
-COLS = {"month_profit": "月利润潜力(¥)", "opp": "机会分", "article_no": "货号", "title": "名称", "cat": "品类",
-        "cn_sold": "30天销量", "kr_sold": "韩国卖家", "lv_krw": "LV韩国价(₩)", "dewu_cny": "得物价(¥)",
-        "net_cny": "净利(¥)", "margin": "利润率"}
+# 盈利机会榜:把量化标准各项加权分拆开显示 + 总分,按总分降序
+COLS = {"opp": "总分", "s_demand": "需求分(0.40)", "s_net": "净利分(0.35)", "s_margin": "利润率分(0.25)",
+        "article_no": "货号", "title": "名称", "cat": "品类", "cn_sold": "30天销量", "kr_sold": "韩国卖家",
+        "lv_krw": "LV韩国价(₩)", "dewu_cny": "得物价(¥)", "net_cny": "净利(¥)", "margin": "利润率",
+        "month_profit": "月利润潜力(¥)"}
 def norm(rows):
     out = []
     for r in rows:
-        r = dict(r); r.setdefault("dewu_cny", r.get("dewu_cn_cny")); r.setdefault("month_profit", "")
+        r = dict(r); r.setdefault("dewu_cny", r.get("dewu_cn_cny"))
         out.append({v: r.get(k) for k, v in COLS.items()})
     return pd.DataFrame(out)
 
-prof = norm(b.get("profitable", b.get("rows", [])))
-allc = norm(b.get("all_computed", []))
+prof = norm(sorted(b.get("profitable", b.get("rows", [])), key=lambda r: r.get("opp", 0), reverse=True))
+allc = norm(sorted(b.get("all_computed", []), key=lambda r: r.get("net_cny", 0), reverse=True))
 
 # —— 版本尺码明细:读原始导出,拆颜色/版本/尺码,算每个可交易SKU的净利 ——
 def num(v):
@@ -65,7 +67,7 @@ if xs:
                       "版本": field(spec, "版本"), "尺码": field(spec, "尺码"),
                       "得物价(¥)": round(dewu_krw / fx), "LV价(₩)": lv["lv_krw"],
                       "净利(¥)": c.net_profit_cny, "利润率": c.margin_rate})
-    detail = pd.DataFrame(drows).sort_values(["货号", "净利(¥)"], ascending=[True, False])
+    detail = pd.DataFrame(drows).sort_values("利润率", ascending=False)
 
 os.makedirs(os.path.dirname(OUT), exist_ok=True)
 with pd.ExcelWriter(OUT, engine="openpyxl") as xw:
