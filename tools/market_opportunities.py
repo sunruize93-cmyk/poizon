@@ -33,10 +33,12 @@ def main():
     df = pd.read_excel(XLSX)
     df.columns = [c.strip() for c in df.columns]
     # 聚合到货号（SPU）：China 销量/KR 销量按 SKU 求和，价格取均值
+    import numpy as np
     df["_cn"] = df["中国市场总销量"].map(num)
     df["_kr"] = df["本地卖家总销量"].map(num)
-    df["_avg"] = df["过去30天成交均价"].map(num)
-    df["_low"] = df["当前中国最低出价"].map(num)
+    # 价格按 SKU 聚合时排除 0（无成交的尺码成交均价为0，会把中位数拉低）
+    df["_avg"] = df["过去30天成交均价"].map(num).replace(0, np.nan)
+    df["_low"] = df["当前中国最低出价"].map(num).replace(0, np.nan)
     df["_bid"] = pd.to_numeric(df["用户是否能出价 1:允许出价 0:不可出价"], errors="coerce").fillna(0)
     g = df.groupby("商品货号").agg(
         title=("商品名称", "first"), brand=("商品品牌", "first"),
@@ -46,6 +48,8 @@ def main():
         bidable=("_bid", "max"), spu_id=("spu_id", "first"),
     ).reset_index().rename(columns={"商品货号": "article_no"})
     # 成交均价缺失时回退到最低出价
+    g["avg_price"] = g["avg_price"].fillna(0)
+    g["low_price"] = g["low_price"].fillna(0)
     g["cn_price"] = g["avg_price"].where(g["avg_price"] > 0, g["low_price"])
 
     # 缺口分：中国有量 + 本地卖家少。gap = 中国销量 / (本地销量+1)，再要求中国销量达门槛
