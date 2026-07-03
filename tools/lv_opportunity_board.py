@@ -26,7 +26,15 @@ extra_disc = float(os.getenv("LV_DISCOUNT", "0"))
 if extra_disc:
     cfg["cost"]["voucher_rate"] = cfg["cost"].get("voucher_rate", 0.03) + extra_disc
 
-demand = {r["article_no"]: r for r in json.load(open("data/lv_demand_shortlist.json"))["rows"]}
+import re as _re
+# 用全量得物LV(有需求且可出价),而非只用窄 shortlist——凡是抓到LV价的都参与算利润
+_all = json.load(open("data/dewu_market.json"))["rows"]
+demand = {}
+for r in _all:
+    if r.get("bidable") == 1 and r.get("cn_sold", 0) > 0:
+        m = _re.match(r"^([A-Z0-9]{5,8})", str(r["article_no"]))
+        if m:
+            demand[m.group(1)] = r
 prices = json.load(open("data/lv_prices.json")).get("results", {}) if os.path.exists("data/lv_prices.json") else {}
 
 rows = []
