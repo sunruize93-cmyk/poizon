@@ -78,8 +78,10 @@ print(" 机会分 中国销量 韩卖 净利¥ 利润率 品类   LV韩价₩   
 for r in prof[:25]:
     print(f" {r['opp']:.3f} {r['cn_sold']:>6} {r['kr_sold']:>3} {r['net_cny']:>6.0f} {r['margin']:>5.0%} {str(r['cat'])[:4]:4} {r['lv_krw']:>9} {r['dewu_cn_cny']:>8.0f}  {r['article_no']:8} {r['title'][:20]}")
 
-json.dump({"count": len(prof), "rows": prof}, open("data/lv_opportunity_board.json", "w"), ensure_ascii=False, indent=1)
-print(f"\n✓ 机会榜 → data/lv_opportunity_board.json ({len(prof)} 盈利款)")
+rows.sort(key=lambda r: r["net_cny"], reverse=True)
+json.dump({"count": len(prof), "profitable": prof, "all_computed": rows},
+          open("data/lv_opportunity_board.json", "w"), ensure_ascii=False, indent=1)
+print(f"\n✓ 机会榜 → data/lv_opportunity_board.json ({len(prof)} 盈利款 / {len(rows)} 测算)")
 skipped = len(demand) - len(rows)
 if skipped:
     print(f"  ({skipped} 款缺 LV价/得物价未算,补抓 LV 价后重跑)")
