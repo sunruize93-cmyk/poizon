@@ -75,8 +75,8 @@ def main():
     json.dump({"count": len(out), "rows": out}, open("data/dewu_market.json", "w"), ensure_ascii=False, indent=1)
     print(f"\n✓ 聚合 {len(out)} 货号 → data/dewu_market.json")
 
-    # 需求验证过的可出价 shortlist（喂 L2 LV 报价：只给有中国需求的抓价）
-    short = g[(g.bidable == 1) & (g.cn_sold >= 50)].sort_values("cn_sold", ascending=False).head(50)
+    # 需求验证过的可出价 shortlist（喂 L2 LV 报价：有中国需求即抓价，之后按毛利而非销量排）
+    short = g[(g.bidable == 1) & (g.cn_sold >= 30)].sort_values("cn_sold", ascending=False).head(150)
     cols = ["article_no", "title", "cat2", "cat3", "cn_sold", "kr_sold", "cn_price"]
     json.dump({"count": len(short), "rows": short[cols].to_dict("records")},
               open("data/lv_demand_shortlist.json", "w"), ensure_ascii=False, indent=1)

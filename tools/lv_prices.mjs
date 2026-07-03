@@ -82,6 +82,10 @@ for (let i = 1; i < rows.length; i++) {
 }
 fs.writeFileSync(CSV, rows.map(r => r.join(',')).join('\n') + '\n');
 fs.mkdirSync('data', { recursive: true });
-fs.writeFileSync('data/lv_prices.json', JSON.stringify({ fetchedAt: new Date().toISOString(), results }, null, 1));
-console.log(`\n✓ 写回 ${CSV}: 更新 ${updated} 个价格 | 明细 data/lv_prices.json`);
+// 合并已有价格(增量抓取累积,不覆盖之前的)
+let merged = {};
+try { merged = JSON.parse(fs.readFileSync('data/lv_prices.json', 'utf8')).results || {}; } catch {}
+Object.assign(merged, results);
+fs.writeFileSync('data/lv_prices.json', JSON.stringify({ fetchedAt: new Date().toISOString(), results: merged }, null, 1));
+console.log(`\n✓ 写回 ${CSV}: 更新 ${updated} 个价格 | 本次 ${Object.keys(results).length} 款 | 累计 ${Object.keys(merged).length} → data/lv_prices.json`);
 await ctx.close();

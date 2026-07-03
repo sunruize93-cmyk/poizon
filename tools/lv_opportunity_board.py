@@ -53,11 +53,15 @@ for art, d in demand.items():
     })
 
 prof = [r for r in rows if r["net_cny"] > 0]
-# 机会分：需求与利润都归一化(低本地竞争是共同前提)。需求权重高(用户要走量的冷门潜力)
+# 机会分:偏「每单利润+利润率」(找冷门高毛利),需求只作次要加权(有量即可,不追爆款)。
+# 低本地竞争是共同前提。这样才surface出「别人没盯上、单件却很赚」的冷门潜力款。
 if prof:
-    mx_sold = max(r["cn_sold"] for r in prof); mx_net = max(r["net_cny"] for r in prof)
+    mx_sold = max(r["cn_sold"] for r in prof) or 1
+    mx_net = max(r["net_cny"] for r in prof) or 1
+    mx_mg = max(r["margin"] for r in prof) or 1
     for r in prof:
-        r["opp"] = round(0.55 * (r["cn_sold"] / mx_sold) + 0.45 * (r["net_cny"] / mx_net), 3)
+        r["opp"] = round(0.45 * (r["net_cny"] / mx_net) + 0.35 * (r["margin"] / mx_mg)
+                         + 0.20 * (r["cn_sold"] / mx_sold), 3)
     prof.sort(key=lambda r: r["opp"], reverse=True)
 
 print(f"参与计算 {len(rows)} 款(有LV价+得物价) | 盈利 {len(prof)} 款 | 汇率1CNY={fx:.0f}KRW\n")
