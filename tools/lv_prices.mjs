@@ -56,7 +56,7 @@ const fetchOne = (art) => page.evaluate(async ({ u, cid, csec, corr }) => {
   try {
     const r = await fetch(u, { headers: { accept: 'application/json', client_id: cid, client_secret: csec, 'x-correlation-id': corr }, credentials: 'include' });
     const t = await r.text(); let d = {}; try { d = JSON.parse(t); } catch {}
-    return { status: r.status, priceRaw: d.priceRaw ?? null, sellable: d.sellable ?? null, backOrder: d.backOrder ?? null, name: d.name || '', productId: d.productId || '', color: d.color || '' };
+    return { status: r.status, priceRaw: d.priceRaw ?? null, sellable: d.sellable ?? null, backOrder: d.backOrder ?? null, name: d.name || '', productId: d.productId || '', color: d.color || '', newArrivalsDate: d.newArrivalsDate ?? null };
   } catch (e) { return { status: -1, err: String(e) }; }
 }, { u: `${B}/${art}`, cid: creds.client_id, csec: creds.client_secret, corr: `${Date.now()}-${Math.floor(Math.random() * 99999)}` });
 
