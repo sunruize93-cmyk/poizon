@@ -1,89 +1,90 @@
 # poizon 选品引擎
 
-> **一句话**：自主从品牌官网(现 LV)发现商品 → 判断哪些有潜力 → 只对高潜力的抓价、和得物(POIZON)对比销量利润 → 排出**最值得倒卖的品**。一套**可迁移**引擎(换品牌/平台只写适配器)。
+> **一句话**：自动从品牌官网(现 LV)发现商品 → 判断哪些有潜力 → 和得物(POIZON)对比中国销量/竞争/利润 → 排出**最值得倒卖的品**。一套**可迁移**引擎(换品牌/平台只写适配器)。
 
 面向使用者：韩国得物商家，做 LV 小皮具(钱包/皮带/鞋)韩国直邮倒卖。物流/清关/退税已通，**痛点是选品**。
 
 ---
 
-## 🤖 给 Agent 的操作手册（照此即可自主选品）
+## 🟢 给使用者：怎么用(不用懂代码)
 
-> 你(Agent)拿到这个仓库后，按下面的漏斗逐层跑。**核心原则：便宜信号在前、昂贵操作在后，每层大幅减量**，不要全量爬对比。
+### 你只需要提供这些
+**首次(一次性):**
+1. **一台韩国网络的 Mac + 装好 Claude Code**。（抓取必须用韩国 IP 过 LV 的 Akamai，且登录态在本机——所以在这台机器上运行，不是把 GitHub 扔给云端。）
+2. **登录一次得物商家后台**：让 AI 驱动打开 `seller.poizon.com`，你用 **+82 手机验证码**登一次，登录态存本机 `tools/.seller_profile`，之后自动复用、免重登。
+3. **确认成本参数**(`config/settings.yaml`)：买入折扣、物流单价、得物费率。**默认已按你的真实成本表填好**(采购系数 0.8891 = 退税 10/11 − 商品券 3% + 出口申报 1%)，变了再改。
 
-### 0. 一次性准备
-```bash
-python3 -m venv .venv && source .venv/bin/activate && pip install -r requirements.txt
-npm install                                    # patchright(LV 抓取用)
-cp .env.example .env                           # 填得物 AppKey/Secret、LV_PROXY(可选)
-cp config/settings.example.yaml config/settings.yaml   # 成本参数+评分权重
-cp config/skus.example.csv config/skus.csv     # 可空;引擎会自动发现货号
-```
+**每次想选品，只要说一句:**
+> "帮我选一波 LV 鞋 / 小皮具 / 腰带 的品"
 
-### 漏斗 5 层（附每层命令 + 该用的模型）
+可选附加条件：最低利润率、只看新品、预算多少件、某个类目。
 
-| 层 | 做什么 | 命令 | 成本/模型 |
-|---|---|---|---|
-| **L0 发现** | 拉 LV sitemap 全量商品(货号+品类) | `python tools/lv_catalog.py` | 免费·无需模型 |
-| **L1 潜力初判** | 规则砍到目标品类 → **LLM 给商品名打潜力分** | `python tools/run_engine.py --top 200` 导出待打分 → 打分 → `--apply` | **Sonnet 子代理**打分 |
-| **L2 LV 报价** | 只给高潜力 shortlist 批量抓 LV 现价+可售 | `node tools/lv_prices.mjs <货号...>` | **Sonnet 子代理**跑 |
-| **L3 得物廉价信号** | 官方 API 查在售/想要人数 | (引擎内 DewuMarket 自动) | 便宜·无需模型 |
-| **L4 得物成交核验** | 只对入围品屏幕 OCR 抓「最近购买」真实成交 | `.venv/bin/python tools/uia.py do "act;ocr"` | **Sonnet 子代理**抓+读 |
-| **出榜** | 算净利/利润率+热度综合分排序 | `python tools/run_engine.py --full` | Opus 定最终判断 |
+### 你会拿到什么
+一张**机会榜**(表格)，每行：货号 · 品名 · 买入价(LV韩国) · 得物卖价 · **净利/利润率** · 中国30天销量 · 韩国竞争卖家 · **机会分**，按"该不该进"从高到低排好。
 
-**L1 的 LLM 打分怎么做**：读 `data/lv_judge_batch.json`(规则存活的 Top-N)，按「韩中价差潜力 × 系列热度 × 经典 vs 冷门」给每个 0~1 分，写 `data/lv_llm_scores_full.json`（格式 `{"scores":{"<货号>":{"score":..,"reason":..}}}`），再 `python tools/run_engine.py --apply data/lv_llm_scores_full.json` 回填出 `data/lv_shortlist.json`。**这步派 Sonnet 子代理做**。
-
-### ⚠️ 关键操作纪律（Agent 必须遵守）
-- **模型路由**：机械活(LV 抓价 / 得物屏幕 OCR / 商品名批量打分)一律派 **Sonnet 子代理**；Opus 只留最终选品判断、算利润口径、写代码。省 token。
-- **LV 抓取绕 Akamai**：每次抓价用**全新 profile 名**(`LV_PROFILE=tools/.lv_profile_<随机>`)。封禁是 profile 级，换名即恢复；别傻等 IP。搜索/分类接口(search-merch)对自动化 403 不可用——**发现只走 sitemap**，报价走 `prodct-dtl`。
-- **得物只采近 7 天成交**(周销量信号)，别全爬；读数据用 `uia.py ocr` 出文本，**别整屏截图喂模型**。
-- **绝不点得物「立即购买」**(详情页右下绿色按钮)，防误购。
-- **凭证/业务数据永不入库**：`.env`/`config/skus.csv`/`config/settings.yaml`/`data/` 均已 gitignore。
+### AI 的记忆(为什么不用每次重讲)
+AI 在这台 Mac 上有**持久记忆**(`~/.claude/.../memory`)，记着整套流程、工具、你的成本口径、历次发现和结论。**换一个新对话也记得**，不用重新解释。
+> GitHub 存的是**代码**；**记忆、登录态、数据**都在你本机(不入库)。所以换机器要重新登录得物、重跑基线。
 
 ---
 
-## 算法（两步，选品的核心）
+## 🔁 每次选品，AI 实际会跑的流程
 
-### ① 算净利（每个「码数×包装」单独算）
+> 原则：**便宜信号在前、贵操作在后**，每层大幅减量，不全量爬。
+
+```
+1. 得物需求(便宜, 批量)  seller后台按品牌导出 → 每个货号的 中国30天销量/成交均价/韩国卖家销量
+        ↓ 筛:中国有销量 × 韩国卖家≈0(供给缺口)
+2. LV 报价(中, 只给入围款) patchright 抓 LV 韩国现价 → 算净利/利润率(用你的成本模型)
+        ↓ 排:机会分 = 0.45净利 + 0.35利润率 + 0.20需求
+3. 出机会榜               该进哪些货，按机会分排序
+```
+**上新窗口(进阶主线)**：定期快照 LV 目录+得物，`diff` 出**新出现的货号=新品**，在 launch 窗口(价没被代购压下来前)抓得物价——这是利润最肥、最能跑赢欧洲代购的时机。基线已存 `data/snapshots/`，每隔几天跑一次 `tools/lv_new_arrivals.py snapshot` 即累积。
+
+**实测重要结论**：LV **成熟热门款**(有 30 天销量的)已被竞争压到**薄利甚至负毛利**；真正赚钱的是**上新窗口**和**限量联名**。所以选品逻辑重心是"**抓供给缺口 + 上新窗口**"，不是扫成熟爆款。
+
+---
+
+## 🧮 算法(选品核心，两步)
+
+### ① 算净利(每个货号)
 ```
 采购成本(CNY) = LV含税价(KRW) × (10/11 − 券率3% + 出口申报1%) ÷ 汇率  + 物流(中程×重量+顺丰+包装)
-得物到手(CNY) = 成交价 × (1 − 技术费 − 转账费1%) − 操作费¥38 − 邮补¥8.72
-净利 = 到手 − 总成本      利润率 = 净利 / 总成本      （普通挂单 / 立即变现 两场景取高）
+得物到手(CNY) = 得物结算价 × (1 − 技术费5% − 转账费1%) − 操作费¥38 − 邮补¥8.72
+净利 = 到手 − 总成本      利润率 = 净利 / 总成本      (普通挂单/立即变现两场景取高)
 ```
-口径：得物成交价=买家付含税价；结算价=含税÷(1+跨境税)，税档 `<5000→9.1%`、`≥5000→20%`。参数在 `config/settings.yaml`。
+口径：得物"过去30天成交均价"=卖家结算价(已核对，非买家含税)；跨境电商税(<5000→9.1%、≥5000→20%)买家承担。参数在 `config/settings.yaml`，已复现你的成本表(含税4.3M→成本¥17067、到手¥24467、净利43%)。
 
-### ② 综合分（先硬过滤，再加权）
-硬过滤：`净利<¥100` 或 `利润率<6%` 或 `90天0成交(滞销)` → 淘汰。
-幸存者 8 指标 min-max 归一化后加权：
+### ② 机会分
+供给缺口(中国销量高×韩国卖家低)是前提；在此之上偏**毛利**排序：
 ```
-综合分 = 0.45×流动性(月化速度/最近成交/想要/买家) + 0.40×盈利(净利/利润率) − 0.15×风险(竞争/价格波动)
+机会分 = 0.45×净利 + 0.35×利润率 + 0.20×需求      (找冷门高毛利，不追爆款)
 ```
-代码 `src/scorer/heat.py`。跨境资金有限、压货即亏，故「卖得快」与「赚得多」并重。
 
 ---
 
-## 可迁移架构（换品牌/平台只写适配器）
+## 🧩 可迁移架构(换品牌/平台只写适配器)
 
 ```
-src/engine/     引擎核心(品牌无关)
-  base.py         数据契约 RawItem→Priced→Signaled→Opportunity + 接口 SourceAdapter/MarketAdapter/PotentialJudge + BrandProfile
-  judge.py        HybridJudge：规则(品类/价带/热门冷门系列) + LLM(Claude)精排，可插拔
-  funnel.py       漏斗编排，每层 cap 控成本
-  profiles.py     各品牌域知识(LV：主营品类/价带/热门系列/冷门信号)
-src/sources/    供给侧适配器：lv.py(sitemap 发现 + prodct-dtl 报价)   ← 换品牌加 gucci.py 等
-src/markets/    需求侧适配器：dewu.py(官方API信号 + 屏幕OCR核验)      ← 换平台加新的
-src/scorer/     利润模型 + 评分(品牌无关)   src/fx.py 实时汇率
-tools/          lv_catalog.py(发现) lv_prices.mjs(报价) uia.py(屏幕控制+OCR) run_engine.py(跑漏斗) run_sales.py(逐码数榜单)
-data/  config/  docs/    产出/配置/文档(gitignore)
+src/engine/     引擎核心(品牌无关)：base.py(数据契约+接口+BrandProfile) / judge.py(规则+LLM潜力判官)
+                funnel.py(漏斗编排) / profiles.py(各品牌域知识)
+src/sources/    供给侧：lv.py(sitemap发现 + prodct-dtl报价)          ← 换品牌加 gucci.py 等
+src/markets/    需求侧：dewu.py(seller后台批量需求 + 屏幕OCR核验)      ← 换平台加新的
+src/scorer/     利润模型+评分(品牌无关)   src/fx.py 实时汇率
+tools/  得物侧: poizon_seller_login/export/dl.mjs(登录/导出/下载) · market_opportunities.py(缺口分析)
+        LV侧:  lv_catalog.py(目录发现) · lv_prices.mjs(批量抓价,增量合并) · lv_new_arrivals.py(快照差分)
+        出榜:  lv_opportunity_board.py · lv_new_arrival_board.py · run_engine.py
+data/ config/ docs/   产出/配置/文档(全 gitignore，不入库)
 ```
-
 **接新品牌**：写一个 `SourceAdapter`(discover+price) + 一个 `BrandProfile`(域知识/成本参数)，其余(判官/漏斗/评分/得物侧)复用。
 
 ---
 
-## 现状
-- ✅ 引擎闭环跑通：LV sitemap 发现 6450 品 → 规则+Claude 精排 → 得物成交核验出机会榜(实测 1AK8BN 综合分0.86)
-- ✅ LV 抓价打通(prodct-dtl，货号即可)；得物屏幕 OCR 抓价打通(近7天，本地 OCR 省 token)
-- ✅ 成本模型按实拍成本校验、实时汇率、双变现场景
-- 🔜 待完善：全量候选 LLM 打分常态化；L2 报价接入 funnel 自动跑；接第二个品牌验证可迁移性
+## ✅ 现状
+- ✅ 得物 seller 后台打通：批量拿中国30天销量/成交价/韩国卖家销量(1110款LV，1090款韩国0卖家=竞争极空)
+- ✅ LV 抓价打通(prodct-dtl，货号即可，含 client_id/secret 鉴权)；成本模型已复现用户成本表
+- ✅ 端到端机会榜跑通；上新窗口监控(快照差分)已搭+基线
+- ⚠️ 成熟款均价下毛利薄(竞争已压平)→ 选品重心转向**上新窗口+供给缺口**(下次快照起出真新品流)
+- 🔜 待做：扩抓更多 LV 价补全榜单；上新窗口自动化(定时快照)；接第二个品牌验证可迁移
 
-详见 `docs/方案.md`。
+安全：凭证/成本/货号/销量/登录态全部 gitignore，绝不入库。详见 `docs/方案.md`。
