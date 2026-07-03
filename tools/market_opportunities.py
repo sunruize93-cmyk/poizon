@@ -37,13 +37,16 @@ def main():
     df["_kr"] = df["本地卖家总销量"].map(num)
     df["_avg"] = df["过去30天成交均价"].map(num)
     df["_low"] = df["当前中国最低出价"].map(num)
+    df["_bid"] = pd.to_numeric(df["用户是否能出价 1:允许出价 0:不可出价"], errors="coerce").fillna(0)
     g = df.groupby("商品货号").agg(
         title=("商品名称", "first"), brand=("商品品牌", "first"),
         cat1=("商品一级类目", "first"), cat2=("商品二级类目", "first"), cat3=("商品三级类目", "first"),
         cn_sold=("_cn", "sum"), kr_sold=("_kr", "sum"),
         avg_price=("_avg", "median"), low_price=("_low", "median"),
-        spu_id=("spu_id", "first"),
+        bidable=("_bid", "max"), spu_id=("spu_id", "first"),
     ).reset_index().rename(columns={"商品货号": "article_no"})
+    # 成交均价缺失时回退到最低出价
+    g["cn_price"] = g["avg_price"].where(g["avg_price"] > 0, g["low_price"])
 
     # 缺口分：中国有量 + 本地卖家少。gap = 中国销量 / (本地销量+1)，再要求中国销量达门槛
     g["gap_ratio"] = g["cn_sold"] / (g["kr_sold"] + 1)
@@ -67,6 +70,13 @@ def main():
     out = g.to_dict("records")
     json.dump({"count": len(out), "rows": out}, open("data/dewu_market.json", "w"), ensure_ascii=False, indent=1)
     print(f"\n✓ 聚合 {len(out)} 货号 → data/dewu_market.json")
+
+    # 需求验证过的可出价 shortlist（喂 L2 LV 报价：只给有中国需求的抓价）
+    short = g[(g.bidable == 1) & (g.cn_sold >= 50)].sort_values("cn_sold", ascending=False).head(50)
+    cols = ["article_no", "title", "cat2", "cat3", "cn_sold", "kr_sold", "cn_price"]
+    json.dump({"count": len(short), "rows": short[cols].to_dict("records")},
+              open("data/lv_demand_shortlist.json", "w"), ensure_ascii=False, indent=1)
+    print(f"✓ 可出价需求 shortlist {len(short)} 款 → data/lv_demand_shortlist.json (喂 LV 报价)")
 
 
 if __name__ == "__main__":
