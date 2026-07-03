@@ -3,9 +3,12 @@
 用法: python tools/export_excel.py [输出路径.xlsx]
 """
 import sys, json, os
+from datetime import datetime
 import pandas as pd
 
-OUT = sys.argv[1] if len(sys.argv) > 1 else os.path.expanduser("~/Desktop/poizon选品/LV机会榜_20260703.xlsx")
+# 默认输出到桌面留档文件夹,文件名自动带日期+时间(每次都有时间戳)
+_ts = datetime.now().strftime("%Y%m%d_%H%M")
+OUT = sys.argv[1] if len(sys.argv) > 1 else os.path.expanduser(f"~/Desktop/poizon选品/LV机会榜_{_ts}.xlsx")
 b = json.load(open("data/lv_opportunity_board.json"))
 
 COLS = {
