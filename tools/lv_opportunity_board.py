@@ -61,22 +61,26 @@ for art, d in demand.items():
     })
 
 prof = [r for r in rows if r["net_cny"] > 0]
-# 机会分:偏「每单利润+利润率」(找冷门高毛利),需求只作次要加权(有量即可,不追爆款)。
-# 低本地竞争是共同前提。这样才surface出「别人没盯上、单件却很赚」的冷门潜力款。
+# 排序主指标 = 月利润潜力 = 单件净利 × 30天销量(得物款级动销,权威字段 last30GlobalSaleNum)。
+# 这样"高毛利但几乎不动"(如5件/月)不会被顶上来;真正能赚钱=既有毛利又走得动。
+# 机会分保留为归一化综合分(次要参考,含毛利/利润率/需求)。
+for r in prof:
+    r["month_profit"] = round(r["net_cny"] * r["cn_sold"])
 if prof:
     mx_sold = max(r["cn_sold"] for r in prof) or 1
     mx_net = max(r["net_cny"] for r in prof) or 1
     mx_mg = max(r["margin"] for r in prof) or 1
     for r in prof:
-        r["opp"] = round(0.45 * (r["net_cny"] / mx_net) + 0.35 * (r["margin"] / mx_mg)
-                         + 0.20 * (r["cn_sold"] / mx_sold), 3)
-    prof.sort(key=lambda r: r["opp"], reverse=True)
+        r["opp"] = round(0.40 * (r["cn_sold"] / mx_sold) + 0.35 * (r["net_cny"] / mx_net)
+                         + 0.25 * (r["margin"] / mx_mg), 3)
+    prof.sort(key=lambda r: r["month_profit"], reverse=True)
 
-print(f"参与计算 {len(rows)} 款(有LV价+得物价) | 盈利 {len(prof)} 款 | 汇率1CNY={fx:.0f}KRW\n")
-print("★ LV 冷门潜力机会榜（低韩国竞争 × 有中国需求 × 盈利）:")
-print(" 机会分 中国销量 韩卖 净利¥ 利润率 品类   LV韩价₩   得物中国¥  货号     名称")
+print(f"参与计算 {len(rows)} 款(有LV价+得物价) | 盈利 {len(prof)} 款 | 汇率1CNY={fx:.0f}KRW")
+print("(销量=得物款级『过去30天』动销,权威字段;非App『最近购买』累计数)\n")
+print("★ LV 机会榜(按月利润潜力=净利×30天销量 排序):")
+print(" 月利润潜力 30天销量 韩卖 净利¥ 利润率 机会分 品类  LV韩价₩  得物¥ 货号     名称")
 for r in prof[:25]:
-    print(f" {r['opp']:.3f} {r['cn_sold']:>6} {r['kr_sold']:>3} {r['net_cny']:>6.0f} {r['margin']:>5.0%} {str(r['cat'])[:4]:4} {r['lv_krw']:>9} {r['dewu_cn_cny']:>8.0f}  {r['article_no']:8} {r['title'][:20]}")
+    print(f" {r['month_profit']:>8.0f} {r['cn_sold']:>5} {r['kr_sold']:>3} {r['net_cny']:>6.0f} {r['margin']:>5.0%} {r['opp']:.3f} {str(r['cat'])[:4]:4} {r['lv_krw']:>8} {r['dewu_cn_cny']:>6.0f} {r['article_no']:8} {r['title'][:18]}")
 
 rows.sort(key=lambda r: r["net_cny"], reverse=True)
 json.dump({"count": len(prof), "profitable": prof, "all_computed": rows},
