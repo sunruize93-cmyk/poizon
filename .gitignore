@@ -30,3 +30,4 @@ tools/_*.json
 tools/.lv_auth.json
 tools/.lv_profile*
 tools/.dewu_profile/
+tools/.seller_profile
