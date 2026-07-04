@@ -69,11 +69,22 @@ if xs:
                       "净利(¥)": c.net_profit_cny, "利润率": c.margin_rate})
     detail = pd.DataFrame(drows).sort_values("利润率", ascending=False)
 
+# —— 直发线(POIZON)——
+direct = pd.DataFrame()
+if os.path.exists("data/direct_board.json"):
+    dr = json.load(open("data/direct_board.json")).get("rows", [])
+    direct = pd.DataFrame([{
+        "利润率": r.get("margin"), "净利(₩)": r.get("net_krw"), "技术费(₩)": r.get("fee"),
+        "直发价(₩)": r.get("direct_krw"), "LV买入(₩)": r.get("lv_krw"),
+        "货号": r.get("article_no"), "名称": str(r.get("name", ""))[:24],
+    } for r in dr])
+
 os.makedirs(os.path.dirname(OUT), exist_ok=True)
 with pd.ExcelWriter(OUT, engine="openpyxl") as xw:
-    prof.to_excel(xw, sheet_name="盈利机会榜", index=False)
-    if len(allc): allc.to_excel(xw, sheet_name="全部测算", index=False)
-    if len(detail): detail.to_excel(xw, sheet_name="版本尺码明细", index=False)
+    prof.to_excel(xw, sheet_name="线1_现货机会榜", index=False)
+    if len(direct): direct.to_excel(xw, sheet_name="线2_直发机会榜", index=False)
+    if len(allc): allc.to_excel(xw, sheet_name="现货_全部测算", index=False)
+    if len(detail): detail.to_excel(xw, sheet_name="现货_版本尺码明细", index=False)
     for ws in xw.sheets.values():
         ws.freeze_panes = "A2"
         for col in ws.columns:
