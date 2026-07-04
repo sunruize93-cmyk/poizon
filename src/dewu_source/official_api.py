@@ -27,6 +27,14 @@ PATH_BY_ARTICLE = "/dop/api/v1/pop/api/v1/intl-commodity/intl/sku/sku-basic-info
 PATH_BY_BARCODES = "/dop/api/v1/pop/api/v1/intl-commodity/intl/sku/sku-basic-info/by-barcodes"
 PATH_LOWEST_PRICE = "/dop/api/v1/pop/api/v1/recommend-bid/price"
 PATH_LOWEST_PRICE_BATCH = "/dop/api/v1/pop/api/v1/recommend-bid/batchPrice"
+# 直发(Direct)出价：biddingType=27
+PATH_DIRECT_BID = "/dop/api/v1/pop/api/v1/submit-bid/direct-autonomous-bidding"
+PATH_DIRECT_BID_UPDATE = "/dop/api/v1/pop/api/v1/update-bid/direct-autonomous-bidding"
+PATH_BID_CANCEL = "/dop/api/v1/pop/api/v1/cancel-bid/cancel-bidding"
+PATH_BID_LIST = "/dop/api/v1/pop/api/v1/retrieve-bid/general-type-bidding-list"
+# 盘货(takestock)：上传货盘→得物匹配→返回逐渠道预计利润/销量/竞争力
+PATH_TAKESTOCK_CREATE = "/dop/api/v1/pop/api/v1/takestock/create"
+PATH_TAKESTOCK_LIST = "/dop/api/v1/pop/api/v1/takestock/pop/spu/list"
 
 
 def _enc(s) -> str:
@@ -87,6 +95,35 @@ class DewuOfficialClient:
             "skuId": sku_id, "region": region, "currency": currency,
             "biddingType": bidding_type, "saleType": sale_type,
         })
+
+    # ---- 直发(Direct)出价 biddingType=27 ----
+    def query_direct_bids(self, page_size=100, exclusive_start_offset_id=None) -> dict:
+        """查询直发出价列表(biddingType=27)。"""
+        biz = {"biddingType": 27, "pageSize": page_size}
+        if exclusive_start_offset_id:
+            biz["exclusiveStartOffsetId"] = exclusive_start_offset_id
+        return self._call(PATH_BID_LIST, biz)
+
+    def submit_direct_bid(self, biz: dict) -> dict:
+        """提交直发自主出价。⚠️真实上架商品,调用前必须显式确认。biz 需含 spuId/skuId/价格等。"""
+        return self._call(PATH_DIRECT_BID, biz)
+
+    def update_direct_bid(self, biz: dict) -> dict:
+        """更新直发出价(需先 query 拿 sellerBiddingNo)。⚠️改真实挂单价。"""
+        return self._call(PATH_DIRECT_BID_UPDATE, biz)
+
+    def cancel_bid(self, seller_bidding_no: str) -> dict:
+        return self._call(PATH_BID_CANCEL, {"sellerBiddingNo": seller_bidding_no})
+
+    # ---- 盘货：上传货盘 + 拉逐渠道预计利润/销量 ----
+    def takestock_list(self, page_num=1, page_size=50, **filters) -> dict:
+        """拉盘货结果:含 channelSale30Days/globalSale30Days + normal/deposit/bonded 各渠道
+        预计出价(expectedBidPrice)/展示价(showPrice)/预计收入(projectedIncome)/价格竞争力。
+        注:销量字段需邮件 yangtiantian01@dewu.com 申请白名单。"""
+        return self._call(PATH_TAKESTOCK_LIST, {"pageNum": page_num, "pageSize": page_size, **filters})
+
+    def takestock_create(self, biz: dict) -> dict:
+        return self._call(PATH_TAKESTOCK_CREATE, biz)
 
     # ---- 销量：barCode → 30天销量 ----
     def query_by_barcodes(self, barcodes: list[str], page_size=100, page_num=1) -> dict:

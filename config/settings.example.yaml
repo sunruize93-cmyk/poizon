@@ -37,6 +37,20 @@ sell:
   instant_bid_discount: 0.06
   prefer_scenario: best           # best | normal | instant：用哪个利润进榜（best=两者取高）
 
+# ============ 直发出价(Direct, biddingType=27)——第二条业务线 ============
+# 韩国集货仓直发到中国买家。竞争:杀国内货价 / 只比欧洲直发贵一口价。
+# ⚠️以下费率/物流为占位默认,需按你实际直发成本核实填写。
+direct:
+  logistics_cny: 60               # 直发物流(韩国集货仓集包直发到买家,每件),待核实
+  tech_fee_rate: 0.05             # 得物直发技术服务费(是否与现货同?待核实)
+  transfer_fee_rate: 0.01         # 转账手续费
+  operation_fee_cny: 0            # 直发操作费(直发免得物仓操作?待核实)
+  buyer_shipping_subsidy_cny: 0   # 直发是否有邮补,待核实
+  # 定价策略:卖价基准=得物直发最低价(bt=27)。二选一(或都设,取更优):
+  europe_markup_cny: 30           # 比欧洲直发(直发最低价)贵这么多元(抢速度,韩国比欧洲快)
+  undercut_domestic_rate: 0.05    # 或:按现货最低价往下杀这么多比例
+  auto_follow_type: 5             # 自动跟价:5=跟全球最低价再低一档(对应"贵欧洲一口价"的反向,杀价用7跟中国最低)
+
 # ============ 选品评分权重 ============
 scoring:
   weights:
