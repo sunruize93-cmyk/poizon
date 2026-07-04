@@ -34,6 +34,8 @@ def main():
     ap.add_argument("--brand", default="LV")
     ap.add_argument("--min-margin", type=float, default=0.0)
     ap.add_argument("--fresh-days", type=int, default=3, help="得物导出超过几天算过期")
+    ap.add_argument("--direct-limit", type=int, default=30, help="直发线抓多少个货号的POIZON价(API,慢)")
+    ap.add_argument("--no-direct", action="store_true", help="跳过直发线(只出现货线)")
     args = ap.parse_args()
 
     print(f"═══ 一键选品 [{args.brand}] ═══\n")
@@ -62,9 +64,18 @@ def main():
     need = list(dict.fromkeys(need))
 
     # 打印机会榜(过滤 min-margin 由 board 已排序,这里直接展示 board 输出的核心)
+    print("\n══ 线① 中国得物(现货)══")
     for line in board_out.splitlines():
         if any(k in line for k in ["机会榜", "机会分", "盈利", "✓", "净利", "%"]) or re.search(r"\d", line):
             print(line)
+
+    # 4) 线② 直发(POIZON, bt=27, API 抓价, 按利润率降序)
+    if not args.no_direct:
+        print(f"\n══ 线② 直发出价(POIZON, Top{args.direct_limit})══")
+        dr = subprocess.run([PY, "tools/direct_board.py", str(args.direct_limit)], capture_output=True, text=True)
+        for line in dr.stdout.splitlines():
+            if any(k in line for k in ["直发线", "利润率", "✓"]) or re.search(r"\d", line):
+                print(line)
 
     print("\n── 下一步(需浏览器/AI)──")
     if age > args.fresh_days:
