@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
-"""直发(Direct/POIZON)线机会榜:对需求 shortlist 拿 POIZON 直发价(bt=27,KRW)→算直发净利→按利润率降序。
-只对标 POIZON 出价,不掺得物CNY。直发价缓存 data/direct_prices.json(增量,免重复调API)。
+"""直发(Direct/POIZON)线机会榜 + 逐版本尺码明细。
+对需求 shortlist 拿 POIZON 直发价(bt=27,KRW,逐SKU)→算直发净利→按利润率降序。
+只对标 POIZON,不掺得物CNY。逐SKU价缓存 data/direct_prices.json(增量)。
+产出 data/direct_board.json:{rows:货号级最优, sku_detail:逐SKU(版本/尺码/直发价/净利)}。
 用法: python tools/direct_board.py [最多抓几个货号,默认30]
 """
-import sys, os, json, warnings, time
+import sys, os, json, warnings, time, re
 warnings.filterwarnings("ignore")
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from dotenv import load_dotenv
@@ -16,60 +18,88 @@ LIMIT = int(sys.argv[1]) if len(sys.argv) > 1 else 30
 cfg = yaml.safe_load(open("config/settings.example.yaml", encoding="utf-8"))
 if os.path.exists("config/settings.yaml"):
     cfg = yaml.safe_load(open("config/settings.yaml", encoding="utf-8"))
-
 lv_prices = json.load(open("data/lv_prices.json")).get("results", {}) if os.path.exists("data/lv_prices.json") else {}
 short = json.load(open("data/lv_demand_shortlist.json"))["rows"] if os.path.exists("data/lv_demand_shortlist.json") else []
 cache = json.load(open("data/direct_prices.json")) if os.path.exists("data/direct_prices.json") else {}
 c = DewuOfficialClient()
 
-import re
+
 def clean(a):
     m = re.match(r"^([A-Z0-9]{5,8})", str(a)); return m.group(1) if m else None
 
-# 候选=有需求(shortlist)且已抓LV价的货号
+
+def sku_edition_size(s):
+    """从 regionSalePvInfoList 取 版本(Edition) + 尺码(优先KR,附CHN)。"""
+    edition, kr, chn = "", "", ""
+    for pv in s.get("regionSalePvInfoList") or []:
+        if pv.get("sizeInfos"):
+            for si in pv["sizeInfos"]:
+                if si.get("sizeKey") == "KR" and si.get("value"):
+                    kr = si["value"]
+                elif si.get("sizeKey") == "CHN" and si.get("value"):
+                    chn = si["value"]
+        elif pv.get("value"):
+            edition = pv["value"]
+    size = (f"KR{kr}" if kr else "") + (f"/CHN{chn}" if chn else ("" if kr else (f"CHN{chn}" if chn else "")))
+    return edition, size
+
+
 arts = []
 for r in short:
     a = clean(r["article_no"])
     if a and a in lv_prices and lv_prices[a].get("status") == 200 and a not in arts:
         arts.append(a)
 arts = arts[:LIMIT]
-print(f"直发线:对 {len(arts)} 个货号拿 POIZON 直发价(bt=27)…\n")
+print(f"直发线:对 {len(arts)} 个货号拿逐SKU POIZON直发价(bt=27)…\n")
 
-def fetch_direct_krw(art):
+
+def fetch_skus(art):
+    """返回 [{edition,size,direct_krw}],缓存到 cache[art]。"""
     if art in cache:
         return cache[art]
+    out = []
     try:
         info = c.query_by_article_number(art, region="KR")
         skus = [s for s in ((info.get("data") or [{}])[0].get("skuInfoList") or []) if s.get("buyStatus") == 1]
-        low = 0.0
-        for s in skus[:8]:  # 限每货号最多8个SKU,控API量
+        for s in skus[:12]:   # 每货号最多12个SKU,控API量
             sid = s.get("skuId") or s.get("dwSkuId")
             p = _market_price(c.get_lowest_price(sid, region="KR", currency="KRW", bidding_type=27).get("data") or {}, "KRW")
-            if p and (low == 0 or p < low): low = p
-            time.sleep(0.2)
-        cache[art] = low
-        return low
+            if p:
+                ed, sz = sku_edition_size(s)
+                out.append({"edition": ed, "size": sz, "direct_krw": int(p)})
+            time.sleep(0.15)
     except Exception:
-        cache[art] = 0
-        return 0
+        pass
+    cache[art] = out
+    return out
 
-rows = []
+
+rows, detail = [], []
 for a in arts:
     lv_krw = float(lv_prices[a].get("priceRaw") or 0)
-    direct_krw = fetch_direct_krw(a)
-    if lv_krw <= 0 or direct_krw <= 0:
-        continue
-    d = direct_net(lv_krw, direct_krw, cfg)
     name = lv_prices[a].get("name", "")
-    rows.append({"article_no": a, "name": name, "lv_krw": int(lv_krw), "direct_krw": int(direct_krw),
-                 "fee": d["fee"], "net_krw": d["net"], "margin": d["margin"]})
+    skus = fetch_skus(a)
+    if lv_krw <= 0 or not skus:
+        continue
+    best = None
+    for sk in skus:
+        d = direct_net(lv_krw, sk["direct_krw"], cfg)
+        drow = {"article_no": a, "name": str(name)[:22], "edition": sk["edition"], "size": sk["size"],
+                "direct_krw": sk["direct_krw"], "fee": d["fee"], "net_krw": d["net"], "margin": d["margin"]}
+        detail.append(drow)
+        if best is None or d["margin"] > best["margin"]:
+            best = drow
+    if best:
+        rows.append(best)
 
 json.dump(cache, open("data/direct_prices.json", "w"), ensure_ascii=False)
 rows.sort(key=lambda r: r["margin"], reverse=True)
-json.dump({"count": len(rows), "rows": rows}, open("data/direct_board.json", "w"), ensure_ascii=False, indent=1)
+detail.sort(key=lambda r: r["margin"], reverse=True)
+json.dump({"count": len(rows), "rows": rows, "sku_detail": detail},
+          open("data/direct_board.json", "w"), ensure_ascii=False, indent=1)
 
-print("★ 直发线机会榜(POIZON,按利润率降序):")
-print(" 利润率 净利₩ 技术费₩ 直发价₩ LV买入₩ 货号     名称")
+print("★ 直发线机会榜(POIZON,货号级最优,按利润率降序):")
+print(" 利润率 净利₩ 直发价₩ LV买入₩ 货号     版本/尺码            名称")
 for r in rows[:25]:
-    print(f" {r['margin']:>5.0%} {r['net_krw']:>8} {r['fee']:>6} {r['direct_krw']:>8} {r['lv_krw']:>8} {r['article_no']:8} {str(r['name'])[:18]}")
-print(f"\n✓ {len(rows)} 款 → data/direct_board.json (直发价缓存 data/direct_prices.json)")
+    print(f" {r['margin']:>5.0%} {r['net_krw']:>8} {r['direct_krw']:>8} {r['lv_krw'] if 'lv_krw' in r else int(lv_prices[r['article_no']].get('priceRaw') or 0):>8} {r['article_no']:8} {(r['edition'][:8]+' '+r['size'])[:18]:18} {str(r['name'])[:16]}")
+print(f"\n✓ 货号级 {len(rows)} + 逐SKU明细 {len(detail)} → data/direct_board.json")
