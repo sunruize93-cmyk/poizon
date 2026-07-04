@@ -57,7 +57,7 @@ AI 在这台 Mac 上有**持久记忆**(`~/.claude/.../memory`)，记着整套�
 | 卖价基准 | 得物国内成交价 | 得物直发最低价(欧洲直发价) |
 | 出价接口 | 现货出价 | `direct-autonomous-bidding` + 自动跟价(followType) |
 
-两条线卖价基准都从开放 API `recommend-bid/price`（传 biddingType 20/27）取；直发出价可经 API 自动挂单/跟价。`python tools/two_line.py <货号>` 出两条线净利对比。
+两条线卖价基准都从开放 API `recommend-bid/price`（传 biddingType 20/27）取；直发出价可经 API 自动挂单/跟价。**`python tools/run_select.py` 一条命令同时出两条线榜**：线①现货(得物CNY,按总分排) + 线②直发(POIZON,按利润率降序)；`--direct-limit N` 控直发抓价数、`--no-direct` 只出现货。单货号对比用 `tools/two_line.py`。
 
 **直发线成本口径**（全程 KRW）：物流自有集团月付、每件不计；技术服务费 **14%，单笔封顶 ₩15,000~₩45,000**（LV 贵货 14% 早超顶、实际只收 ₩45,000≈2%，故直发费远低于现货）；成本 = LV含税价×0.8891。**只对标 POIZON 直发出价、按利润空间降序**。实测**直发线普遍比现货更赚**（费封顶）：如 1ACNYF 现货 15%→直发 24%、M13391 6%→14%——直发更适合高值 LV。
 > ⚠️ 真实提交出价 = 上架真商品，务必人工确认后再调 API（不自动挂单/跟价）。
