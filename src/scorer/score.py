@@ -39,22 +39,20 @@ def _sell_net(price_cny: float, tech_rate: float, sell: dict) -> float:
     return net
 
 
-def direct_net(lv_price_krw: float, direct_sell_cny: float, cfg: dict,
-               krw_per_cny: float) -> dict:
-    """直发(Direct)线净利:韩国集货仓直发,卖价基准=得物直发最低价(bt=27)。
-    成本=LV买入(同现货去税/券系数)+直发物流;卖家到手=直发卖价×(1-费率)-杂费。
-    返回 {cost, net, margin}。费率/物流取 cfg['direct'](占位默认,待核实)。"""
+def direct_net(lv_price_krw: float, direct_sell_krw: float, cfg: dict) -> dict:
+    """直发(Direct)线净利,全程 KRW。卖价基准=POIZON直发最低价(bt=27)。
+    技术费=14%,封顶[15000,45000]韩元;物流月付固定不计;成本=LV买入×去税券系数。
+    返回 {cost, sell, fee, net, margin}(均KRW)。"""
     cost_cfg = cfg["cost"]
     d = cfg.get("direct", {})
-    fx = krw_per_cny or cfg["fx"].get("krw_per_cny", 224)
     factor = (10 / 11) - cost_cfg.get("voucher_rate", 0) + cost_cfg.get("export_filing_rate", 0)
-    purchase = lv_price_krw * factor / fx if lv_price_krw and fx else 0.0
-    cost = purchase + d.get("logistics_cny", 60)
-    net_recv = direct_sell_cny * (1 - d.get("tech_fee_rate", 0.05) - d.get("transfer_fee_rate", 0.01))
-    net_recv -= d.get("operation_fee_cny", 0) + d.get("buyer_shipping_subsidy_cny", 0)
-    net = net_recv - cost
-    return {"cost": round(cost, 2), "net": round(net, 2),
-            "margin": round(net / cost, 4) if cost > 0 else 0.0}
+    cost = lv_price_krw * factor + d.get("logistics_cny", 0)   # logistics_cny=0(月付)
+    sell = direct_sell_krw + d.get("europe_markup_krw", 0)
+    fee = sell * d.get("tech_fee_rate", 0.14)
+    fee = max(d.get("tech_fee_min_krw", 15000), min(fee, d.get("tech_fee_max_krw", 45000)))
+    net = sell - fee - cost
+    return {"cost": round(cost), "sell": round(sell), "fee": round(fee),
+            "net": round(net), "margin": round(net / cost, 4) if cost > 0 else 0.0}
 
 
 def compute_profit(c: Candidate, cfg: dict, krw_per_cny: float | None = None) -> Candidate:

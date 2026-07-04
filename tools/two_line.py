@@ -24,7 +24,7 @@ c = DewuOfficialClient()
 d = cfg.get("direct", {})
 
 arts = sys.argv[1:] or ["1AAREW"]
-print(f"两条线对比 (1CNY={fx:.0f}KRW; 直发费率为占位默认待核实)\n")
+print(f"两条线对比 (1CNY={fx:.0f}KRW; 直发:14%费封顶₩15k~45k,月付物流不计)\n")
 for art in arts:
     lv_krw = float((prices.get(art) or {}).get("priceRaw") or 0)
     try:
@@ -33,25 +33,24 @@ for art in arts:
         if not items:
             print(f"[{art}] 得物KR未找到"); continue
         skus = [s for s in (items[0].get("skuInfoList") or []) if s.get("buyStatus") == 1]
-        # 取整体最低:现货 bt=20 / 直发 bt=27
-        spot = direct = 0.0
+        # 现货 bt=20(CNY,得物国内);直发 bt=27(KRW,POIZON直发)
+        spot_cny = direct_krw = 0.0
         for s in skus:
             sid = s.get("skuId") or s.get("dwSkuId")
             p20 = _market_price(c.get_lowest_price(sid, region="KR", currency="CNY", bidding_type=20).get("data") or {}, "CNY")
-            p27 = _market_price(c.get_lowest_price(sid, region="KR", currency="CNY", bidding_type=27).get("data") or {}, "CNY")
-            if p20 and (spot == 0 or p20 < spot): spot = p20
-            if p27 and (direct == 0 or p27 < direct): direct = p27
-        # 现货线:卖价=现货最低价,走现货成本模型
+            p27 = _market_price(c.get_lowest_price(sid, region="KR", currency="KRW", bidding_type=27).get("data") or {}, "KRW")
+            if p20 and (spot_cny == 0 or p20 < spot_cny): spot_cny = p20
+            if p27 and (direct_krw == 0 or p27 < direct_krw): direct_krw = p27
+        # 现货线(得物CNY)
         spot_net = spot_mg = 0.0
-        if spot and lv_krw:
+        if spot_cny and lv_krw:
             cand = Candidate(article_no=art, lv=LVProduct(article_no=art, category="shoes", price_krw=lv_krw, sellable=True),
-                             dewu=DewuProduct(article_no=art, market_price_cny=spot))
+                             dewu=DewuProduct(article_no=art, market_price_cny=spot_cny))
             compute_profit(cand, cfg, fx); spot_net, spot_mg = cand.net_profit_cny, cand.margin_rate
-        # 直发线:目标卖价=直发最低价+欧洲加价(抢速度);走直发成本模型
-        target = (direct + d.get("europe_markup_cny", 0)) if direct else 0
-        dn = direct_net(lv_krw, target, cfg, fx) if (target and lv_krw) else {"net": 0, "margin": 0}
+        # 直发线(POIZON KRW,14%封顶费,月付物流不计)
+        dn = direct_net(lv_krw, direct_krw, cfg) if (direct_krw and lv_krw) else {"net": 0, "margin": 0, "fee": 0}
         print(f"[{art}] LV买入 ₩{int(lv_krw)}")
-        print(f"  现货线: 得物最低¥{spot:.0f} → 净利¥{spot_net:.0f} ({spot_mg:.0%})")
-        print(f"  直发线: 直发最低¥{direct:.0f} +加价{d.get('europe_markup_cny',0)}=目标¥{target:.0f} → 净利¥{dn['net']:.0f} ({dn['margin']:.0%})")
+        print(f"  现货线(得物国内): 最低¥{spot_cny:.0f} → 净利¥{spot_net:.0f} ({spot_mg:.0%})")
+        print(f"  直发线(POIZON):   直发最低₩{int(direct_krw)} 技术费₩{dn.get('fee',0)} → 净利₩{dn['net']} ({dn['margin']:.0%})")
     except Exception as e:
         print(f"[{art}] 出错: {e}")
