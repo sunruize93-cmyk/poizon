@@ -51,8 +51,13 @@ def direct_net(lv_price_krw: float, direct_sell_krw: float, cfg: dict) -> dict:
     fee = sell * d.get("tech_fee_rate", 0.14)
     fee = max(d.get("tech_fee_min_krw", 15000), min(fee, d.get("tech_fee_max_krw", 45000)))
     net = sell - fee - cost
-    return {"cost": round(cost), "sell": round(sell), "fee": round(fee),
-            "net": round(net), "margin": round(net / cost, 4) if cost > 0 else 0.0}
+    # 得物买家看到的CNY显示价 = (韩币出价/得物汇率)×跨境税系数(非普通汇率换算)
+    dfx = d.get("dewu_fx", 199.2)
+    cny_display = round(sell / dfx * d.get("cross_border_tax", 1.091), 0) if dfx else 0
+    declare = sell > d.get("declare_threshold_krw", 2000000)   # >200万KRW触发出口申报手续费
+    return {"cost": round(cost), "sell": round(sell), "fee": round(fee), "net": round(net),
+            "margin": round(net / cost, 4) if cost > 0 else 0.0,
+            "cny_display": cny_display, "declare_needed": declare}
 
 
 def compute_profit(c: Candidate, cfg: dict, krw_per_cny: float | None = None) -> Candidate:

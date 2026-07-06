@@ -36,6 +36,15 @@ def norm(rows):
 prof = norm(sorted(b.get("profitable", b.get("rows", [])), key=lambda r: r.get("opp", 0), reverse=True))
 allc = norm(sorted(b.get("all_computed", []), key=lambda r: r.get("net_cny", 0), reverse=True))
 
+# LV 侧库存(含首尔线下可买):lv_prices 的 locateInStore + skus[].storeSell
+lvp = json.load(open("data/lv_prices.json")).get("results", {}) if os.path.exists("data/lv_prices.json") else {}
+def store_info(art):
+    v = lvp.get(art) or {}
+    if not v.get("locateInStore"):
+        return "线上"
+    sizes = [s.get("size") for s in (v.get("skus") or []) if s.get("storeSell")]
+    return "首尔线下可买" + (f"({v.get('nStore',0)}码)" if v.get("nStore") else "")
+
 # —— 版本尺码明细:读原始导出,拆颜色/版本/尺码,算每个可交易SKU的净利 ——
 def num(v):
     if v is None or (isinstance(v, float) and pd.isna(v)): return 0.0
@@ -66,7 +75,8 @@ if xs:
         drows.append({"货号": art, "名称": str(lv["title"])[:24], "颜色": field(spec, "颜色"),
                       "版本": field(spec, "版本"), "尺码": field(spec, "尺码"),
                       "得物价(¥)": round(dewu_krw / fx), "LV价(₩)": lv["lv_krw"],
-                      "净利(¥)": c.net_profit_cny, "利润率": c.margin_rate})
+                      "净利(¥)": c.net_profit_cny, "利润率": c.margin_rate,
+                      "首尔线下": store_info(art)})
     detail = pd.DataFrame(drows).sort_values("利润率", ascending=False)
 
 # —— 直发线(POIZON)：货号级最优 + 逐版本尺码明细 ——
@@ -75,15 +85,31 @@ if os.path.exists("data/direct_board.json"):
     db = json.load(open("data/direct_board.json"))
     def drow(r):
         return {"利润率": r.get("margin"), "净利(₩)": r.get("net_krw"), "技术费(₩)": r.get("fee"),
-                "直发价(₩)": r.get("direct_krw"), "货号": r.get("article_no"),
-                "版本": r.get("edition", ""), "尺码": r.get("size", ""), "名称": str(r.get("name", ""))[:24]}
+                "直发价(₩)": r.get("direct_krw"), "得物显示(¥)": r.get("cny_display"),
+                "超200万申报": "⚠是" if r.get("declare") else "", "货号": r.get("article_no"),
+                "版本": r.get("edition", ""), "尺码": r.get("size", ""),
+                "首尔线下": store_info(r.get("article_no")), "名称": str(r.get("name", ""))[:24]}
     direct = pd.DataFrame([drow(r) for r in db.get("rows", [])])
     direct_detail = pd.DataFrame([drow(r) for r in db.get("sku_detail", [])])
+
+# —— 线3 上架机会(LV有×得物没有)——
+listing = pd.DataFrame()
+if os.path.exists("data/listing_candidates.json"):
+    lc = json.load(open("data/listing_candidates.json")).get("rows", [])
+    lrows = []
+    for r in lc:
+        a = r["article_no"]; v = lvp.get(a) or {}
+        lrows.append({"潜力": r.get("potential"), "货号": a, "名称(slug)": r.get("slug", ""),
+                      "LV价(₩)": v.get("priceRaw"), "LV可售": "可" if v.get("sellable") else "?",
+                      "首尔线下": store_info(a), "得物": "没有" if r.get("dewu_has") is False else "?",
+                      "判断": r.get("reason", "")})
+    listing = pd.DataFrame(lrows)
 
 os.makedirs(os.path.dirname(OUT), exist_ok=True)
 with pd.ExcelWriter(OUT, engine="openpyxl") as xw:
     prof.to_excel(xw, sheet_name="线1_现货机会榜", index=False)
     if len(direct): direct.to_excel(xw, sheet_name="线2_直发机会榜", index=False)
+    if len(listing): listing.to_excel(xw, sheet_name="线3_上架机会", index=False)
     if len(direct_detail): direct_detail.to_excel(xw, sheet_name="直发_版本尺码明细", index=False)
     if len(allc): allc.to_excel(xw, sheet_name="现货_全部测算", index=False)
     if len(detail): detail.to_excel(xw, sheet_name="现货_版本尺码明细", index=False)

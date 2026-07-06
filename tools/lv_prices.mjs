@@ -56,9 +56,9 @@ const fetchOne = (art) => page.evaluate(async ({ u, cid, csec, corr }) => {
   try {
     const r = await fetch(u, { headers: { accept: 'application/json', client_id: cid, client_secret: csec, 'x-correlation-id': corr }, credentials: 'include' });
     const t = await r.text(); let d = {}; try { d = JSON.parse(t); } catch {}
-    // 逐尺码库存:skus[] 里每个 size + 是否可买(sellable)
-    const skus = (d.skus || []).map(x => ({ size: x.size || x.sizeName || x.name || '', sellable: !!x.sellable, skuId: x.skuId }));
-    return { status: r.status, priceRaw: d.priceRaw ?? null, sellable: d.sellable ?? null, backOrder: d.backOrder ?? null, name: d.name || '', productId: d.productId || '', color: d.color || '', newArrivalsDate: d.newArrivalsDate ?? null, skus, nSell: skus.filter(x => x.sellable).length, nTotal: skus.length };
+    // 逐尺码库存:size + 线上可买(sellable) + 店内可售(csc_Sellable=首尔线下可直接买)
+    const skus = (d.skus || []).map(x => ({ size: x.size || x.sizeName || x.name || '', sellable: !!x.sellable, storeSell: !!x.csc_Sellable, skuId: x.skuId }));
+    return { status: r.status, priceRaw: d.priceRaw ?? null, sellable: d.sellable ?? null, backOrder: d.backOrder ?? null, name: d.name || '', productId: d.productId || '', color: d.color || '', newArrivalsDate: d.newArrivalsDate ?? null, locateInStore: !!d.locateInStore, skus, nSell: skus.filter(x => x.sellable).length, nStore: skus.filter(x => x.storeSell).length, nTotal: skus.length };
   } catch (e) { return { status: -1, err: String(e) }; }
 }, { u: `${B}/${art}`, cid: creds.client_id, csec: creds.client_secret, corr: `${Date.now()}-${Math.floor(Math.random() * 99999)}` });
 

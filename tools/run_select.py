@@ -35,7 +35,9 @@ def main():
     ap.add_argument("--min-margin", type=float, default=0.0)
     ap.add_argument("--fresh-days", type=int, default=3, help="得物导出超过几天算过期")
     ap.add_argument("--direct-limit", type=int, default=30, help="直发线抓多少个货号的POIZON价(API,慢)")
-    ap.add_argument("--no-direct", action="store_true", help="跳过直发线(只出现货线)")
+    ap.add_argument("--no-direct", action="store_true", help="跳过直发线")
+    ap.add_argument("--listing-top", type=int, default=40, help="上架机会线:LV目录潜力Top几个去查得物")
+    ap.add_argument("--no-listing", action="store_true", help="跳过上架机会线")
     args = ap.parse_args()
 
     print(f"═══ 一键选品 [{args.brand}] ═══\n")
@@ -75,6 +77,15 @@ def main():
         dr = subprocess.run([PY, "tools/direct_board.py", str(args.direct_limit)], capture_output=True, text=True)
         for line in dr.stdout.splitlines():
             if any(k in line for k in ["直发线", "利润率", "✓"]) or re.search(r"\d", line):
+                print(line)
+
+    # 5) 线③ 上架机会(供给优先:LV有×得物没有,可抢先上架)
+    if not args.no_listing:
+        print(f"\n══ 线③ 上架机会(LV有×得物没有, 潜力Top{args.listing_top})══")
+        lr = subprocess.run([PY, "tools/listing_opportunity.py", "slg", str(args.listing_top), "--verify"],
+                            capture_output=True, text=True)
+        for line in lr.stdout.splitlines():
+            if any(k in line for k in ["真·上架", "潜力", "✓"]) or re.search(r"\d", line):
                 print(line)
 
     print("\n── 下一步(需浏览器/AI)──")

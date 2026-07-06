@@ -85,7 +85,8 @@ for a in arts:
     for sk in skus:
         d = direct_net(lv_krw, sk["direct_krw"], cfg)
         drow = {"article_no": a, "name": str(name)[:22], "edition": sk["edition"], "size": sk["size"],
-                "direct_krw": sk["direct_krw"], "fee": d["fee"], "net_krw": d["net"], "margin": d["margin"]}
+                "direct_krw": sk["direct_krw"], "fee": d["fee"], "net_krw": d["net"], "margin": d["margin"],
+                "cny_display": d["cny_display"], "declare": d["declare_needed"]}
         detail.append(drow)
         if best is None or d["margin"] > best["margin"]:
             best = drow
@@ -99,7 +100,8 @@ json.dump({"count": len(rows), "rows": rows, "sku_detail": detail},
           open("data/direct_board.json", "w"), ensure_ascii=False, indent=1)
 
 print("★ 直发线机会榜(POIZON,货号级最优,按利润率降序):")
-print(" 利润率 净利₩ 直发价₩ LV买入₩ 货号     版本/尺码            名称")
+print(" 利润率 净利₩ 直发价₩ 得物显示¥ 货号     版本/尺码            名称")
 for r in rows[:25]:
-    print(f" {r['margin']:>5.0%} {r['net_krw']:>8} {r['direct_krw']:>8} {r['lv_krw'] if 'lv_krw' in r else int(lv_prices[r['article_no']].get('priceRaw') or 0):>8} {r['article_no']:8} {(r['edition'][:8]+' '+r['size'])[:18]:18} {str(r['name'])[:16]}")
+    flag = "⚠申报" if r.get("declare") else ""
+    print(f" {r['margin']:>5.0%} {r['net_krw']:>8} {r['direct_krw']:>8} {r.get('cny_display',0):>7.0f}{flag:>4} {r['article_no']:8} {(r['edition'][:8]+' '+r['size'])[:16]:16} {str(r['name'])[:14]}")
 print(f"\n✓ 货号级 {len(rows)} + 逐SKU明细 {len(detail)} → data/direct_board.json")
