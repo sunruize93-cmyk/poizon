@@ -75,7 +75,9 @@ AI 在这台 Mac 上有**持久记忆**(`~/.claude/.../memory`)，记着整套�
 - **⚠️ 出价 > ₩2,000,000** 触发一般贸易出口申报手续费（且视情况需报关授权书）——高值款要留意这笔额外成本/手续。
 - 代码：`score.direct_net()` 返回 `cny_display`（得物显示价）+ `declare_needed`（是否超 200 万门槛）。参数在 `config/settings.yaml` 的 `direct`。
 
-**③ 上架机会线（供给优先，得物没有的品）**：`python tools/listing_opportunity.py slg 40 --verify` —— 从 LV 目录出发（不靠得物需求）→ 潜力判断 → **逐个 by-article 确认得物真没有**（sitemap 差集会严重高估，前12里9个其实得物有，必须逐个确认）→ 得物没有×经典×LV在库 = 可**抢先上架、零竞争**（走直发）。LV 逐尺码库存已可查（`lv_prices.mjs` 存 `skus[].sellable` + `nSell/nTotal`，看"该尺码 LV 有没有货"）。
+**③ 供给缺口线（抢先占位，低竞争）**：`python tools/supply_gap.py 30 3` —— 从**得物有 SPU（有真实中国销量、能挂链接）× 韩国本地卖家≈0** 的品里，按"有需求没人卖"排。这是可靠的抢占机会（真实数据，非盲盒）。排除异皮（鳄鱼/蜥蜴，跨境法律/CITES）+ 限定款（P 开头货号，难补货）。
+> 💡 曾试过"得物完全没有"的品做上架机会，实测多为**老款死货/异皮/限定/难采**（得物没上是有原因的），且无销量数据无法判死活 → 已弃用，改为"供给缺口"（得物有需求但韩国没人卖）。`listing_opportunity.py` 保留备查。
+> LV 逐尺码库存 + **首尔线下可买**（`lv_prices.mjs` 存 `locateInStore` + `skus[].csc_Sellable`）：Excel"首尔线下"列，看能否直接去首尔店拿货。
 
 ---
 
