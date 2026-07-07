@@ -79,13 +79,12 @@ def main():
             if any(k in line for k in ["直发线", "利润率", "✓"]) or re.search(r"\d", line):
                 print(line)
 
-    # 5) 线③ 上架机会(供给优先:LV有×得物没有,可抢先上架)
+    # 5) 线③ 供给缺口(得物有需求×韩国卖家≈0=抢先占位、低竞争。用真实销量,非"得物没有"盲盒)
     if not args.no_listing:
-        print(f"\n══ 线③ 上架机会(LV有×得物没有, 潜力Top{args.listing_top})══")
-        lr = subprocess.run([PY, "tools/listing_opportunity.py", "slg", str(args.listing_top), "--verify"],
-                            capture_output=True, text=True)
+        print("\n══ 线③ 供给缺口(得物有需求×韩国卖家≈0,抢先占位)══")
+        lr = subprocess.run([PY, "tools/supply_gap.py", "30", "3"], capture_output=True, text=True)
         for line in lr.stdout.splitlines():
-            if any(k in line for k in ["真·上架", "潜力", "✓"]) or re.search(r"\d", line):
+            if any(k in line for k in ["供给缺口", "中国销量", "✓"]) or re.search(r"\d", line):
                 print(line)
 
     print("\n── 下一步(需浏览器/AI)──")

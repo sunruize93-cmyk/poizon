@@ -18,20 +18,30 @@ dewu = set(re.match(r"^([A-Z0-9]{5,8})", str(r["article_no"])).group(1)
            if re.match(r"^([A-Z0-9]{5,8})", str(r["article_no"])))
 missing = [i for i in cat_items if i["article_no"] not in dewu]  # 得物货号集里没有
 
-def score(slug):
-    s = slug.lower(); pts, why = 0.5, []
+EXOTIC = ["crocodile", "crocodilien", "croco", "alligator", "python", "lizard", "lezard",
+          "ostrich", "autruche", "karung", "stingray", "exotic"]
+
+def score(slug, art):
+    s = slug.lower()
+    # 硬排除:异皮(跨境法律/CITES问题)
+    hit = [e for e in EXOTIC if e in s]
+    if hit:
+        return 0.05, f"❌异皮/法律排除:{hit[0]}"
+    # 硬降:P开头货号=限定款,难补货/难持续
+    if str(art).upper().startswith("P"):
+        return 0.12, "❌限定款(P开头),难补货"
+    pts, why = 0.5, []
     hot = [p for p in prof.hot_lines if re.search(p.lower(), s)]
     cold = [p for p in prof.cold_signals if re.search(p.lower(), s)]
     if hot: pts += 0.3; why.append("经典/热门:" + ",".join(hot[:3]))
     if cold: pts -= 0.4; why.append("冷门:" + ",".join(cold[:2]))
-    # 小皮具高流动关键词额外加分
     for kw in ["card", "key", "zippy", "coin", "compact", "pocket", "cles", "victorine", "sarah", "brazza"]:
         if kw in s: pts += 0.1; break
-    return max(0, min(1, pts)), "；".join(why) or "小皮具"
+    return max(0, min(1, pts)), ("；".join(why) or "小皮具") + " ⚠得物无SPU需先建档,且无得物销量数据(无法判死货/无人出价)"
 
 rows = []
 for i in missing:
-    p, why = score(i["slug"])
+    p, why = score(i["slug"], i["article_no"])
     rows.append({"article_no": i["article_no"], "slug": i["slug"], "nvprod": i.get("nvprod", ""),
                  "potential": round(p, 3), "reason": why})
 rows.sort(key=lambda r: r["potential"], reverse=True)

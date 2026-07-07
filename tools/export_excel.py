@@ -92,24 +92,22 @@ if os.path.exists("data/direct_board.json"):
     direct = pd.DataFrame([drow(r) for r in db.get("rows", [])])
     direct_detail = pd.DataFrame([drow(r) for r in db.get("sku_detail", [])])
 
-# —— 线3 上架机会(LV有×得物没有)——
+# —— 线3 供给缺口(得物有需求×韩国卖家≈0=抢先占位)——
 listing = pd.DataFrame()
-if os.path.exists("data/listing_candidates.json"):
-    lc = json.load(open("data/listing_candidates.json")).get("rows", [])
-    lrows = []
-    for r in lc:
-        a = r["article_no"]; v = lvp.get(a) or {}
-        lrows.append({"潜力": r.get("potential"), "货号": a, "名称(slug)": r.get("slug", ""),
-                      "LV价(₩)": v.get("priceRaw"), "LV可售": "可" if v.get("sellable") else "?",
-                      "首尔线下": store_info(a), "得物": "没有" if r.get("dewu_has") is False else "?",
-                      "判断": r.get("reason", "")})
-    listing = pd.DataFrame(lrows)
+if os.path.exists("data/supply_gap.json"):
+    sg = json.load(open("data/supply_gap.json")).get("rows", [])
+    listing = pd.DataFrame([{
+        "中国30天销量": r.get("cn_sold"), "韩国卖家": r.get("kr_sold"), "缺口比": r.get("gap"),
+        "得物价(₩)": r.get("cn_price_krw"), "货号": r.get("article_no"), "品类": r.get("cat"),
+        "有LV价": "✓" if r.get("lv_priced") else "", "首尔线下": store_info(r.get("article_no")),
+        "名称": str(r.get("title", ""))[:26],
+    } for r in sg])
 
 os.makedirs(os.path.dirname(OUT), exist_ok=True)
 with pd.ExcelWriter(OUT, engine="openpyxl") as xw:
     prof.to_excel(xw, sheet_name="线1_现货机会榜", index=False)
     if len(direct): direct.to_excel(xw, sheet_name="线2_直发机会榜", index=False)
-    if len(listing): listing.to_excel(xw, sheet_name="线3_上架机会", index=False)
+    if len(listing): listing.to_excel(xw, sheet_name="线3_供给缺口", index=False)
     if len(direct_detail): direct_detail.to_excel(xw, sheet_name="直发_版本尺码明细", index=False)
     if len(allc): allc.to_excel(xw, sheet_name="现货_全部测算", index=False)
     if len(detail): detail.to_excel(xw, sheet_name="现货_版本尺码明细", index=False)

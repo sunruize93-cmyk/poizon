@@ -26,8 +26,9 @@ LV = BrandProfile(
         "monogram", "damier", "empreinte", "eclipse",
     ],
     cold_signals=[
-        # 异皮/高价难走量、压资金
-        "crocodile", "alligator", "python", "lizard", "ostrich", "fur", "mink", "shearling",
+        # 异皮:难走量 + 跨境法律/CITES问题(硬排除)。含法语拼写
+        "crocodile", "crocodilien", "croco", "alligator", "python", "lizard", "lezard",
+        "ostrich", "autruche", "karung", "stingray", "exotic", "fur", "mink", "shearling",
         # 高珠宝/贵金属
         "gold", "diamond", "fine jewelry", "high jewelry", "18k", "platinum",
         # 定制/限量/非鞋皮具混入
