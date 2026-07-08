@@ -27,19 +27,23 @@ for r in g:
     art = clean(r["article_no"])
     if any(e in title.lower() for e in EXOTIC) or art.upper().startswith("P"):
         continue  # 异皮法律/限定款排除
-    priced = art in lvp and lvp[art].get("status") == 200
+    st = (lvp.get(art) or {}).get("status")
+    lv_status = "可采" if st == 200 else ("停售" if st == 410 else "未抓")
     rows.append({
         "article_no": art, "title": title[:26], "cat": r.get("cat2") or r.get("cat3"),
         "cn_sold": int(cn), "kr_sold": int(kr), "gap": round(cn / (kr + 1)),
         "cn_price_krw": int(r.get("cn_price", 0)),
-        "lv_priced": priced, "lv_krw": int(lvp.get(art, {}).get("priceRaw") or 0) if priced else 0,
+        "lv_status": lv_status, "lv_krw": int((lvp.get(art) or {}).get("priceRaw") or 0) if st == 200 else 0,
     })
-# 排序:韩国卖家越少越优先,其次中国需求越大越优先(供给缺口=有需求没人卖)
-rows.sort(key=lambda r: (-(r["cn_sold"] if r["kr_sold"] == 0 else 0), -r["gap"], -r["cn_sold"]))
+# 排序:LV可采优先(采不到=停售没意义),再韩国卖家少、中国需求大
+rank = {"可采": 0, "未抓": 1, "停售": 2}
+rows.sort(key=lambda r: (rank[r["lv_status"]], -(r["cn_sold"] if r["kr_sold"] == 0 else 0), -r["cn_sold"]))
 json.dump({"count": len(rows), "rows": rows}, open("data/supply_gap.json", "w"), ensure_ascii=False, indent=1)
 
-print(f"供给缺口榜(得物有需求×韩国卖家≤{MAX_KR},中国销量≥{MIN_CN};排除异皮/限定):{len(rows)} 款")
-print(" 中国销量 韩卖 缺口 得物价₩ 有LV价 货号     名称")
-for r in rows[:30]:
-    print(f" {r['cn_sold']:>6} {r['kr_sold']:>3} {r['gap']:>5} {r['cn_price_krw']:>8} {'✓' if r['lv_priced'] else '·':>3}  {r['article_no']:8} {r['title'][:20]}")
-print(f"\n✓ {len(rows)} 款 → data/supply_gap.json  (有LV价的可直接进线①线②算利润;缺的补抓LV价)")
+n_ok = sum(1 for r in rows if r["lv_status"] == "可采")
+n_stop = sum(1 for r in rows if r["lv_status"] == "停售")
+print(f"供给缺口榜(得物需求≥{MIN_CN}×韩卖≤{MAX_KR};排除异皮/限定):{len(rows)}款 | LV可采{n_ok} 停售{n_stop} 未抓{len(rows)-n_ok-n_stop}")
+print(" 中国销量 韩卖 得物价₩ LV状态 LV价₩ 货号     名称")
+for r in [x for x in rows if x["lv_status"] == "可采"][:30]:
+    print(f" {r['cn_sold']:>6} {r['kr_sold']:>3} {r['cn_price_krw']:>8} {r['lv_status']:>4} {r['lv_krw']:>8} {r['article_no']:8} {r['title'][:20]}")
+print(f"\n★ 关键:热门缺口多为LV停售(采不到)。真正可做=【LV可采】那 {n_ok} 款。→ data/supply_gap.json")

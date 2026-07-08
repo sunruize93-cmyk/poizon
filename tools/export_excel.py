@@ -97,9 +97,9 @@ listing = pd.DataFrame()
 if os.path.exists("data/supply_gap.json"):
     sg = json.load(open("data/supply_gap.json")).get("rows", [])
     listing = pd.DataFrame([{
-        "中国30天销量": r.get("cn_sold"), "韩国卖家": r.get("kr_sold"), "缺口比": r.get("gap"),
-        "得物价(₩)": r.get("cn_price_krw"), "货号": r.get("article_no"), "品类": r.get("cat"),
-        "有LV价": "✓" if r.get("lv_priced") else "", "首尔线下": store_info(r.get("article_no")),
+        "中国30天销量": r.get("cn_sold"), "韩国卖家": r.get("kr_sold"),
+        "得物价(₩)": r.get("cn_price_krw"), "LV状态": r.get("lv_status"), "LV价(₩)": r.get("lv_krw") or "",
+        "货号": r.get("article_no"), "品类": r.get("cat"), "首尔线下": store_info(r.get("article_no")),
         "名称": str(r.get("title", ""))[:26],
     } for r in sg])
 
