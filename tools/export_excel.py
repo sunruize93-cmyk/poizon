@@ -103,11 +103,32 @@ if os.path.exists("data/supply_gap.json"):
         "名称": str(r.get("title", ""))[:26],
     } for r in sg])
 
+# —— 重点款 SKU 级(现货 vs 直发,精确到版本尺码)——
+picks = pd.DataFrame()
+if os.path.exists("data/sku_picks.json"):
+    sp = json.load(open("data/sku_picks.json")).get("rows", [])
+    def prow(r):
+        return {"货号": r["article_no"], "版本": r.get("edition", ""), "尺码": r.get("size", ""),
+                "LV价(₩)": r.get("lv_krw"),
+                "现货得物(¥)": r.get("spot_cny"), "现货净利(¥)": r.get("spot_net_cny"),
+                "现货利润率": r.get("spot_margin"), "现货场景": r.get("spot_scenario"),
+                "直发价(₩)": r.get("direct_krw"), "直发净利(₩)": r.get("direct_net_krw"),
+                "直发利润率": r.get("direct_margin"), "直发显示(¥)": r.get("direct_cny_display"),
+                "超200万申报": "⚠是" if r.get("declare") else "",
+                "首尔线下": store_info(r["article_no"]), "名称": r.get("name", "")}
+    # 每款内按两线最优利润率降序，货号成组
+    def _best(r): return max([m for m in (r.get("spot_margin"), r.get("direct_margin")) if m is not None] or [-9])
+    order = {}
+    for r in sp: order[r["article_no"]] = max(order.get(r["article_no"], -9), _best(r))
+    sp = sorted(sp, key=lambda r: (-order[r["article_no"]], r["article_no"], -_best(r)))
+    picks = pd.DataFrame([prow(r) for r in sp])
+
 os.makedirs(os.path.dirname(OUT), exist_ok=True)
 with pd.ExcelWriter(OUT, engine="openpyxl") as xw:
     prof.to_excel(xw, sheet_name="线1_现货机会榜", index=False)
     if len(direct): direct.to_excel(xw, sheet_name="线2_直发机会榜", index=False)
     if len(listing): listing.to_excel(xw, sheet_name="线3_供给缺口", index=False)
+    if len(picks): picks.to_excel(xw, sheet_name="重点款_尺码版本", index=False)
     if len(direct_detail): direct_detail.to_excel(xw, sheet_name="直发_版本尺码明细", index=False)
     if len(allc): allc.to_excel(xw, sheet_name="现货_全部测算", index=False)
     if len(detail): detail.to_excel(xw, sheet_name="现货_版本尺码明细", index=False)
@@ -118,6 +139,6 @@ with pd.ExcelWriter(OUT, engine="openpyxl") as xw:
             ws.column_dimensions[col[0].column_letter].width = min(max(w + 2, 10), 42)
         for row in ws.iter_rows(min_row=2):
             for c in row:
-                if ws.cell(1, c.column).value == "利润率" and isinstance(c.value, (int, float)):
+                if "利润率" in str(ws.cell(1, c.column).value or "") and isinstance(c.value, (int, float)):
                     c.number_format = "0%"
 print(f"✓ 导出 {len(prof)}盈利 + {len(allc)}测算 + {len(detail)}个SKU明细 → {OUT}")
