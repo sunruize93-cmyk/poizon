@@ -84,8 +84,10 @@ direct = direct_detail = pd.DataFrame()
 if os.path.exists("data/direct_board.json"):
     db = json.load(open("data/direct_board.json"))
     def drow(r):
+        age = r.get("price_age_h")
         return {"利润率": r.get("margin"), "净利(₩)": r.get("net_krw"), "技术费(₩)": r.get("fee"),
                 "直发价(₩)": r.get("direct_krw"), "得物显示(¥)": r.get("cny_display"),
+                "报价龄(h)": (round(age) if isinstance(age, (int, float)) else "?"),
                 "超200万申报": "⚠是" if r.get("declare") else "", "货号": r.get("article_no"),
                 "版本": r.get("edition", ""), "尺码": r.get("size", ""),
                 "首尔线下": store_info(r.get("article_no")), "名称": str(r.get("name", ""))[:24]}

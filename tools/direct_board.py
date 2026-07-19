@@ -14,7 +14,15 @@ import yaml
 from src.dewu_source.official_api import DewuOfficialClient, _market_price
 from src.scorer.score import direct_net
 
-LIMIT = int(sys.argv[1]) if len(sys.argv) > 1 else 30
+import argparse
+from datetime import datetime
+ap = argparse.ArgumentParser()
+ap.add_argument("limit", nargs="?", type=int, default=30, help="抓多少个货号(默认30)")
+ap.add_argument("--refresh", action="store_true", help="忽略缓存,全部重取实时POIZON价")
+ap.add_argument("--ttl-hours", type=float, default=24.0, help="缓存价超过此小时数则重取(默认24)")
+args = ap.parse_args()
+LIMIT, REFRESH, TTL_H = args.limit, args.refresh, args.ttl_hours
+NOW = datetime.now()
 cfg = yaml.safe_load(open("config/settings.example.yaml", encoding="utf-8"))
 if os.path.exists("config/settings.yaml"):
     cfg = yaml.safe_load(open("config/settings.yaml", encoding="utf-8"))
@@ -50,13 +58,27 @@ for r in short:
     if a and a in lv_prices and lv_prices[a].get("status") == 200 and a not in arts:
         arts.append(a)
 arts = arts[:LIMIT]
-print(f"直发线:对 {len(arts)} 个货号拿逐SKU POIZON直发价(bt=27)…\n")
+mode = "全部实时重取" if REFRESH else f"缓存TTL {TTL_H:.0f}h(过期自动重取)"
+print(f"直发线:对 {len(arts)} 个货号拿逐SKU POIZON直发价(bt=27) | {mode}…\n")
+
+
+def _age_h(entry):
+    """缓存条目价龄(小时)。旧格式(裸list,无时间戳)返回 None=当作过期。"""
+    ts = entry.get("ts") if isinstance(entry, dict) else None
+    if not ts:
+        return None
+    try:
+        return round((NOW - datetime.fromisoformat(ts)).total_seconds() / 3600, 1)
+    except Exception:
+        return None
 
 
 def fetch_skus(art):
-    """返回 [{edition,size,direct_krw}],缓存到 cache[art]。"""
-    if art in cache:
-        return cache[art]
+    """返回 (skus, age_h)。命中未过期缓存直接用;否则实时取并盖时间戳。"""
+    ent = cache.get(art)
+    age = _age_h(ent)
+    if ent is not None and not REFRESH and age is not None and age <= TTL_H:
+        return ent.get("skus", []), age
     out = []
     try:
         info = c.query_by_article_number(art, region="KR")
@@ -70,15 +92,18 @@ def fetch_skus(art):
             time.sleep(0.15)
     except Exception:
         pass
-    cache[art] = out
-    return out
+    cache[art] = {"ts": NOW.isoformat(timespec="seconds"), "skus": out}
+    return out, 0.0
 
 
 rows, detail = [], []
+n_fresh = 0
 for a in arts:
     lv_krw = float(lv_prices[a].get("priceRaw") or 0)
     name = lv_prices[a].get("name", "")
-    skus = fetch_skus(a)
+    skus, age_h = fetch_skus(a)
+    if age_h == 0.0:
+        n_fresh += 1
     if lv_krw <= 0 or not skus:
         continue
     best = None
@@ -86,13 +111,14 @@ for a in arts:
         d = direct_net(lv_krw, sk["direct_krw"], cfg)
         drow = {"article_no": a, "name": str(name)[:22], "edition": sk["edition"], "size": sk["size"],
                 "direct_krw": sk["direct_krw"], "fee": d["fee"], "net_krw": d["net"], "margin": d["margin"],
-                "cny_display": d["cny_display"], "declare": d["declare_needed"]}
+                "cny_display": d["cny_display"], "declare": d["declare_needed"], "price_age_h": age_h}
         detail.append(drow)
         if best is None or d["margin"] > best["margin"]:
             best = drow
     if best:
         rows.append(best)
 
+print(f"  价龄:{n_fresh} 个实时新取 / {len(arts) - n_fresh} 个用缓存(≤{TTL_H:.0f}h)")
 json.dump(cache, open("data/direct_prices.json", "w"), ensure_ascii=False)
 rows.sort(key=lambda r: r["margin"], reverse=True)
 detail.sort(key=lambda r: r["margin"], reverse=True)
