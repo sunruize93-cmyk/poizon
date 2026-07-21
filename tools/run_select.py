@@ -35,6 +35,7 @@ def main():
     ap.add_argument("--min-margin", type=float, default=0.0)
     ap.add_argument("--fresh-days", type=int, default=3, help="得物导出超过几天算过期")
     ap.add_argument("--direct-limit", type=int, default=30, help="直发线抓多少个货号的POIZON价(API,慢)")
+    ap.add_argument("--refresh-top", type=int, default=10, help="直发线额外实时核价最赚的前N个(防陈旧高价假象;0=关)")
     ap.add_argument("--no-direct", action="store_true", help="跳过直发线")
     ap.add_argument("--listing-top", type=int, default=40, help="上架机会线:LV目录潜力Top几个去查得物")
     ap.add_argument("--no-listing", action="store_true", help="跳过上架机会线")
@@ -74,7 +75,8 @@ def main():
     # 4) 线② 直发(POIZON, bt=27, API 抓价, 按利润率降序)
     if not args.no_direct:
         print(f"\n══ 线② 直发出价(POIZON, Top{args.direct_limit})══")
-        dr = subprocess.run([PY, "tools/direct_board.py", str(args.direct_limit)], capture_output=True, text=True)
+        dr = subprocess.run([PY, "tools/direct_board.py", str(args.direct_limit),
+                             "--refresh-top", str(args.refresh_top)], capture_output=True, text=True)
         for line in dr.stdout.splitlines():
             if any(k in line for k in ["直发线", "利润率", "✓"]) or re.search(r"\d", line):
                 print(line)

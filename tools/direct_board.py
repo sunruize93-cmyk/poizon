@@ -20,8 +20,9 @@ ap = argparse.ArgumentParser()
 ap.add_argument("limit", nargs="?", type=int, default=30, help="抓多少个货号(默认30)")
 ap.add_argument("--refresh", action="store_true", help="忽略缓存,全部重取实时POIZON价")
 ap.add_argument("--ttl-hours", type=float, default=24.0, help="缓存价超过此小时数则重取(默认24)")
+ap.add_argument("--refresh-top", type=int, default=0, help="额外实时刷新当前最赚的前N个货号(高毛利最可能是陈旧假象)")
 args = ap.parse_args()
-LIMIT, REFRESH, TTL_H = args.limit, args.refresh, args.ttl_hours
+LIMIT, REFRESH, TTL_H, REFRESH_TOP = args.limit, args.refresh, args.ttl_hours, args.refresh_top
 NOW = datetime.now()
 cfg = yaml.safe_load(open("config/settings.example.yaml", encoding="utf-8"))
 if os.path.exists("config/settings.yaml"):
@@ -73,11 +74,11 @@ def _age_h(entry):
         return None
 
 
-def fetch_skus(art):
-    """返回 (skus, age_h)。命中未过期缓存直接用;否则实时取并盖时间戳。"""
+def fetch_skus(art, force=False):
+    """返回 (skus, age_h)。命中未过期缓存直接用;force 或全局 --refresh 则强制实时取并盖时间戳。"""
     ent = cache.get(art)
     age = _age_h(ent)
-    if ent is not None and not REFRESH and age is not None and age <= TTL_H:
+    if ent is not None and not REFRESH and not force and age is not None and age <= TTL_H:
         return ent.get("skus", []), age
     out = []
     try:
@@ -96,29 +97,44 @@ def fetch_skus(art):
     return out, 0.0
 
 
-rows, detail = [], []
-n_fresh = 0
-for a in arts:
+def compute_art(a, force=False):
+    """算某货号逐SKU直发行 + 货号级最优。返回 (best, drows, age_h, lv_krw)。"""
     lv_krw = float(lv_prices[a].get("priceRaw") or 0)
     name = lv_prices[a].get("name", "")
-    skus, age_h = fetch_skus(a)
-    if age_h == 0.0:
-        n_fresh += 1
-    if lv_krw <= 0 or not skus:
-        continue
-    best = None
+    skus, age_h = fetch_skus(a, force=force)
+    drows = []
     for sk in skus:
         d = direct_net(lv_krw, sk["direct_krw"], cfg)
-        drow = {"article_no": a, "name": str(name)[:22], "edition": sk["edition"], "size": sk["size"],
-                "direct_krw": sk["direct_krw"], "fee": d["fee"], "net_krw": d["net"], "margin": d["margin"],
-                "cny_display": d["cny_display"], "declare": d["declare_needed"], "price_age_h": age_h}
-        detail.append(drow)
-        if best is None or d["margin"] > best["margin"]:
-            best = drow
+        drows.append({"article_no": a, "name": str(name)[:22], "edition": sk["edition"], "size": sk["size"],
+                      "direct_krw": sk["direct_krw"], "fee": d["fee"], "net_krw": d["net"], "margin": d["margin"],
+                      "cny_display": d["cny_display"], "declare": d["declare_needed"], "price_age_h": age_h})
+    best = max(drows, key=lambda r: r["margin"]) if drows else None
+    return best, drows, age_h, lv_krw
+
+
+rows, detail = [], []
+for a in arts:
+    best, drows, age_h, lv_krw = compute_art(a)
+    if lv_krw <= 0 or not drows:
+        continue
+    detail.extend(drows)
     if best:
         rows.append(best)
 
-print(f"  价龄:{n_fresh} 个实时新取 / {len(arts) - n_fresh} 个用缓存(≤{TTL_H:.0f}h)")
+# 实时刷新当前最赚的前 N 个:高毛利最可能是陈旧缓存假象,核实后再进榜(如 M28426 曾假显51%实为5%)
+if REFRESH_TOP > 0 and not REFRESH:
+    top_arts = [r["article_no"] for r in sorted(rows, key=lambda r: r["margin"], reverse=True)[:REFRESH_TOP]]
+    print(f"  实时核价:强制刷新当前最赚前 {len(top_arts)} 个…")
+    for a in top_arts:
+        best, drows, age_h, lv_krw = compute_art(a, force=True)
+        detail = [r for r in detail if r["article_no"] != a]
+        rows = [r for r in rows if r["article_no"] != a]
+        detail.extend(drows)
+        if best:
+            rows.append(best)
+
+n_live = sum(1 for r in rows if r.get("price_age_h") == 0.0)
+print(f"  价龄:{n_live}/{len(rows)} 货号为实时价,其余≤{TTL_H:.0f}h缓存")
 json.dump(cache, open("data/direct_prices.json", "w"), ensure_ascii=False)
 rows.sort(key=lambda r: r["margin"], reverse=True)
 detail.sort(key=lambda r: r["margin"], reverse=True)
