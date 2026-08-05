@@ -15,10 +15,13 @@
 import argparse
 import json
 import os
+import subprocess
 import sys
+from datetime import date
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 os.chdir(ROOT)
+PY = ".venv/bin/python"
 
 # ---- 可调阈值 ----
 GOOD_SALES = 10       # 30天销量≥此=销量好
@@ -89,9 +92,14 @@ def main():
     print("\n—— 每款进软件前先按上面『值不值得核』预判; ✓核 = 值得进软件看72h销量+实际立即变现价 ——")
     print("—— 备选(销量适中)只在 Top5 里那几款都做不动时再补 ——")
 
-    out = {"as_of": "2026-08-05", "top_n": args.top, "rows": top}
+    out = {"as_of": date.today().isoformat(), "top_n": args.top, "rows": top}
     json.dump(out, open("data/top5_list.json", "w"), ensure_ascii=False, indent=1)
     print(f"\n✓ → data/top5_list.json")
+
+    # 自动带出 SKU级明细(类型×尺码): 读 top5_list.json 逐货号拆分得物SKU净利 + LV尺码可购性
+    print("\n════ 精确到尺码 (Top5 × 类型 × 尺码) ════")
+    sys.stdout.flush()   # 先冲刷 Top5 表,再跑子进程,保证输出顺序
+    subprocess.run([PY, "tools/top5_skus.py"], check=False)
 
 
 if __name__ == "__main__":

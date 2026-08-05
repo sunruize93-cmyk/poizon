@@ -14,7 +14,7 @@ LV→得物套利选品系统。完整流程/成本口径/工具见 `README.md`�
 - 销量好(≥10) → 挂普通单，不考虑立即变现
 - 销量不好(≤2) → 立即变现 + 考虑取消风险；但立即变现价与72小时销量要进软件看 → 先预判值不值得进软件
 - 销量适中(3-9) → 备选
-输出清单只保留 **Top 5**：`python tools/top5_select.py`。
+输出清单只保留 **Top 5**：`python tools/top5_select.py`（自动带出「精确到尺码」明细，见 tools/top5_skus.py——同一货号不同 版本×尺码 净利差可达¥5000+，进货务必看 SKU 级）。
 
 ## 常用命令
 - 选品出榜：`python tools/run_select.py --brand LV`

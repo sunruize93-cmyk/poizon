@@ -10,10 +10,11 @@
 逻辑: 得物 SKU 卖价 × 成本模型(compute_profit) → 逐 SKU 净利; 拼 LV 侧尺码可购性。
 输出: data/top5_skus.json + 控制台清单。用法: python tools/top5_skus.py
 """
-import pandas as pd, warnings, re, sys, os, json
+import pandas as pd, warnings, re, sys, os, json, glob
 warnings.filterwarnings("ignore")
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-os.chdir(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, ROOT)
+os.chdir(ROOT)
 import yaml
 from src.fx import krw_per_cny
 from src.models import LVProduct, DewuProduct, Candidate
@@ -41,7 +42,10 @@ def field(txt, key):
 
 
 def main():
-    raw = pd.read_excel("data/商品搜索导出20260805.xlsx")
+    xs = sorted(glob.glob("data/商品搜索导出*.xlsx"))
+    if not xs:
+        sys.exit("✗ 没有得物导出 xlsx，先跑 poizon_seller_export/dl 下载")
+    raw = pd.read_excel(xs[-1])
     raw.columns = [c.strip() for c in raw.columns]
     p = json.load(open("data/lv_prices.json")).get("results", {})
     t5 = [r["article_no"] for r in json.load(open("data/top5_list.json"))["rows"]]
