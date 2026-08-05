@@ -53,11 +53,18 @@ allc = norm(sorted(b.get("all_computed", []), key=lambda r: r.get("net_cny", 0),
 # LV 侧库存(含首尔线下可买):lv_prices 的 locateInStore + skus[].storeSell
 lvp = json.load(open("data/lv_prices.json")).get("results", {}) if os.path.exists("data/lv_prices.json") else {}
 def store_info(art):
+    """LV 线下库存标注。注意:数据是抓取时点快照,不是实时库存;官网才是准。
+    nStore/nSell=可订/可售的【尺码个数】,不是件数。没抓过的款标『未抓』,别误读为无线下。"""
     v = lvp.get(art) or {}
-    if not v.get("locateInStore"):
-        return "线上"
-    sizes = [s.get("size") for s in (v.get("skus") or []) if s.get("storeSell")]
-    return "首尔线下可买" + (f"({v.get('nStore',0)}码)" if v.get("nStore") else "")
+    loc = v.get("locateInStore")
+    if loc is True:
+        n = v.get("nStore")
+        if not n:
+            n = len([s for s in (v.get("skus") or []) if s.get("storeSell")])
+        return f"线下可订{n}个尺码" if n else "线下可订"
+    if loc is False:
+        return "官网无线下"
+    return "未抓(以官网为准)"
 
 # —— 版本尺码明细:读原始导出,拆颜色/版本/尺码,算每个可交易SKU的净利 ——
 def num(v):
@@ -153,9 +160,30 @@ if os.path.exists("data/top5_skus.json"):
                           "利润率": r["利润率"], "真实成交": "实" if r["真实成交"] else "价"})
     sku5 = pd.DataFrame(srows)
 
+# —— SKU 综合表单(常规码×权重) / 爆款预测 ——
+comp = pred = pd.DataFrame()
+if os.path.exists("data/sku_comprehensive.json"):
+    sc = json.load(open("data/sku_comprehensive.json")).get("rows", [])
+    comp = pd.DataFrame([{
+        "综合分": r.get("score"), "货号": r.get("article_no"), "名称": r.get("title"),
+        "类目": r.get("cat"), "颜色": r.get("颜色"), "版本": r.get("版本"), "包装": r.get("包装"),
+        "尺码": r.get("尺码"), "尺码风险": r.get("尺码风险"),
+        "SPU月销": r.get("spu_sales"), "净利¥": r.get("净利¥"), "利润率": r.get("利润率"),
+        "月利润¥": r.get("月利润¥"), "真实成交": "有成交" if r.get("真实成交") else "仅出价",
+    } for r in sc])
+if os.path.exists("data/predict_hits.json"):
+    ph = json.load(open("data/predict_hits.json"))
+    pred = pd.DataFrame([{
+        "信号": r.get("signal"), "货号": r.get("article_no"), "名称": r.get("name"),
+        "30天销": r.get("cn_sold"), "上期销": r.get("cn_sold_prev"), "韩国卖家": r.get("kr_sold"),
+        "现价净利¥": r.get("net_cny"), "利润率": r.get("margin"), "预测依据": r.get("why"),
+    } for r in ph])
+
 os.makedirs(os.path.dirname(OUT), exist_ok=True)
 with pd.ExcelWriter(OUT, engine="openpyxl") as xw:
     if len(top5): top5.to_excel(xw, sheet_name="选品清单Top5", index=False)
+    if len(comp): comp.to_excel(xw, sheet_name="综合表单_SKU", index=False)
+    if len(pred): pred.to_excel(xw, sheet_name="爆款预测", index=False)
     if len(sku5): sku5.to_excel(xw, sheet_name="Top5_尺码精确", index=False)
     prof.to_excel(xw, sheet_name="线1_现货机会榜", index=False)
     if len(direct): direct.to_excel(xw, sheet_name="线2_直发机会榜", index=False)
