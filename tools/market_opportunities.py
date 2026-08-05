@@ -16,7 +16,7 @@ XLSX = sys.argv[1] if len(sys.argv) > 1 else "data/商品搜索导出20260703.xl
 
 
 def num(v) -> float:
-    """'3,700+'→3700  '<5'→3  '--'/NaN→0  'KRW85,000'→85000"""
+    """'3,700+'→3700  '<5'→2.5(估算)  '--'/NaN→0  'KRW85,000'→85000"""
     if v is None or (isinstance(v, float) and pd.isna(v)):
         return 0.0
     s = str(v).replace(",", "").replace("KRW", "").replace("₩", "").replace("+", "").strip()
@@ -24,9 +24,17 @@ def num(v) -> float:
         return 0.0
     m = re.search(r"<\s*(\d+)", s)
     if m:
-        return float(m.group(1)) / 2  # "<5" 记 2.5
+        return float(m.group(1)) / 2  # "<5" 记 2.5(估算中点,须标注)
     m = re.search(r"[\d.]+", s)
     return float(m.group()) if m else 0.0
+
+
+def is_masked(v) -> int:
+    """得物把<5的小销量屏蔽为'<5';这些值只能当估算,不能当精确销量。"""
+    if v is None or (isinstance(v, float) and pd.isna(v)):
+        return 0
+    s = str(v).replace(",", "").strip()
+    return 1 if re.match(r"<\s*\d+", s) else 0
 
 
 def main():
@@ -35,6 +43,7 @@ def main():
     # 聚合到货号（SPU）：China 销量/KR 销量按 SKU 求和，价格取均值
     import numpy as np
     df["_cn"] = df["中国市场总销量"].map(num)
+    df["_cnmask"] = df["中国市场总销量"].map(is_masked)   # 被屏蔽为<5的行数(=估算,非精确)
     df["_kr"] = df["本地卖家总销量"].map(num)
     # 价格按 SKU 聚合时排除 0（无成交的尺码成交均价为0，会把中位数拉低）
     df["_avg"] = df["过去30天成交均价"].map(num).replace(0, np.nan)
@@ -43,7 +52,7 @@ def main():
     g = df.groupby("商品货号").agg(
         title=("商品名称", "first"), brand=("商品品牌", "first"),
         cat1=("商品一级类目", "first"), cat2=("商品二级类目", "first"), cat3=("商品三级类目", "first"),
-        cn_sold=("_cn", "sum"), kr_sold=("_kr", "sum"),
+        cn_sold=("_cn", "sum"), cn_masked=("_cnmask", "sum"), kr_sold=("_kr", "sum"),
         avg_price=("_avg", "median"), low_price=("_low", "median"),
         bidable=("_bid", "max"), spu_id=("spu_id", "first"),
     ).reset_index().rename(columns={"商品货号": "article_no"})

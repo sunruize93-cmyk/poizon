@@ -53,17 +53,17 @@ allc = norm(sorted(b.get("all_computed", []), key=lambda r: r.get("net_cny", 0),
 # LV 侧库存(含首尔线下可买):lv_prices 的 locateInStore + skus[].storeSell
 lvp = json.load(open("data/lv_prices.json")).get("results", {}) if os.path.exists("data/lv_prices.json") else {}
 def store_info(art):
-    """LV 线下库存标注。注意:数据是抓取时点快照,不是实时库存;官网才是准。
-    nStore/nSell=可订/可售的【尺码个数】,不是件数。没抓过的款标『未抓』,别误读为无线下。"""
+    """LV 库存标注。⚠️ storeSell/csc_Sellable 只代表『可下单/可订』,不是『店里现在有货』——
+    实测 2026-08-05: 抓取全 true,官网却 4/5 售罄。官网实际库存才是准,此列仅供参考。"""
     v = lvp.get(art) or {}
     loc = v.get("locateInStore")
     if loc is True:
         n = v.get("nStore")
         if not n:
             n = len([s for s in (v.get("skus") or []) if s.get("storeSell")])
-        return f"线下可订{n}个尺码" if n else "线下可订"
+        return f"官网可订{n}尺码(实库以官网为准)" if n else "官网可订(实库以官网为准)"
     if loc is False:
-        return "官网无线下"
+        return "官网不可订"
     return "未抓(以官网为准)"
 
 # —— 版本尺码明细:读原始导出,拆颜色/版本/尺码,算每个可交易SKU的净利 ——

@@ -55,6 +55,7 @@ for art, d in demand.items():
     rows.append({
         "article_no": art, "title": str(d.get("title", ""))[:30],
         "cat": d.get("cat3") or d.get("cat2"), "cn_sold": int(d.get("cn_sold", 0)),
+        "cn_masked": int(d.get("cn_masked", 0) or 0),   # 销量中被屏蔽为<5的尺码数(=估算)
         "kr_sold": int(d.get("kr_sold", 0)), "lv_krw": int(lv_krw),
         "dewu_cn_cny": round(cn_krw / fx, 0), "net_cny": cand.net_profit_cny,
         "margin": cand.margin_rate, "scenario": cand.sell_scenario,

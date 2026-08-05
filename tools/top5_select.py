@@ -85,9 +85,12 @@ def main():
         worth, why = worth_check(r, r["_tier"])
         r["_worth"] = worth
         mark = "✓核" if worth else "—"
-        print(f"{i:>2} {r['article_no']:8} {r['title'][:16]:16} {r['cn_sold']:>5} "
+        sales = r["cn_sold"]
+        est = "*" if (r.get("cn_masked") or 0) > 0 else " "   # *=销量含<5估算,非精确
+        print(f"{i:>2} {r['article_no']:8} {r['title'][:16]:16} {sales:>4}{est} "
               f"{r.get('net_normal', 0):>7.0f} {r.get('net_instant', 0):>10.0f} "
               f"{r['_month']:>8.0f}  {TIER_LABEL[r['_tier']]:5}  {STRATEGY[r['_tier']]:18} {mark}")
+    print("\n  *=30天销量含被屏蔽的'<5'尺码(估算值,非精确)。这些是低销量款,别当热销看。")
 
     print("\n—— 每款进软件前先按上面『值不值得核』预判; ✓核 = 值得进软件看72h销量+实际立即变现价 ——")
     print("—— 备选(销量适中)只在 Top5 里那几款都做不动时再补 ——")
