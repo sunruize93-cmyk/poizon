@@ -16,6 +16,20 @@ from src.scorer.score import compute_profit
 _ts = datetime.now().strftime("%Y%m%d_%H%M")
 OUT = sys.argv[1] if len(sys.argv) > 1 else os.path.expanduser(f"~/Desktop/poizon选品/LV机会榜_{_ts}.xlsx")
 b = json.load(open("data/lv_opportunity_board.json"))
+
+# —— 选品清单 Top5(销量分层决策,2026-08 起的主输出)——
+TLABEL = {0: "销量好", 1: "销量适中", 2: "销量不好"}
+TSTRAT = {0: "挂普通单(不考虑立即变现)", 1: "备选", 2: "立即变现+考虑取消风险"}
+top5 = pd.DataFrame()
+if os.path.exists("data/top5_list.json"):
+    t5 = json.load(open("data/top5_list.json"))
+    def trow(i, r):
+        return {"排名": i, "货号": r["article_no"], "名称": str(r["title"])[:24],
+                "30天销量": r["cn_sold"], "挂单净利(¥)": r.get("net_normal"), "立即变现净利(¥)": r.get("net_instant"),
+                "月利润潜力(¥)": round(r.get("_month") or r.get("month_profit") or 0),
+                "分层": TLABEL.get(r.get("_tier"), ""), "策略": TSTRAT.get(r.get("_tier"), ""),
+                "值得进软件核": "✓是" if r.get("_worth") else "—"}
+    top5 = pd.DataFrame([trow(i, r) for i, r in enumerate(t5.get("rows", []), 1)])
 cfg = yaml.safe_load(open("config/settings.example.yaml", encoding="utf-8"))
 if os.path.exists("config/settings.yaml"):
     cfg = yaml.safe_load(open("config/settings.yaml", encoding="utf-8"))
@@ -127,6 +141,7 @@ if os.path.exists("data/sku_picks.json"):
 
 os.makedirs(os.path.dirname(OUT), exist_ok=True)
 with pd.ExcelWriter(OUT, engine="openpyxl") as xw:
+    if len(top5): top5.to_excel(xw, sheet_name="选品清单Top5", index=False)
     prof.to_excel(xw, sheet_name="线1_现货机会榜", index=False)
     if len(direct): direct.to_excel(xw, sheet_name="线2_直发机会榜", index=False)
     if len(listing): listing.to_excel(xw, sheet_name="线3_供给缺口", index=False)

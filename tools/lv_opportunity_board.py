@@ -58,6 +58,10 @@ for art, d in demand.items():
         "kr_sold": int(d.get("kr_sold", 0)), "lv_krw": int(lv_krw),
         "dewu_cn_cny": round(cn_krw / fx, 0), "net_cny": cand.net_profit_cny,
         "margin": cand.margin_rate, "scenario": cand.sell_scenario,
+        # 双场景利润:挂单(普通卖) vs 立即变现(最高求购价,技术费降至1%)。销量分层决策用。
+        "net_normal": round(cand.profit_normal_cny, 2),
+        "net_instant": round(cand.profit_instant_cny, 2),
+        "cost_cny": cand.cost_cny,
     })
 
 prof = [r for r in rows if r["net_cny"] > 0]
