@@ -139,9 +139,24 @@ if os.path.exists("data/sku_picks.json"):
     sp = sorted(sp, key=lambda r: (-order[r["article_no"]], r["article_no"], -_best(r)))
     picks = pd.DataFrame([prow(r) for r in sp])
 
+# —— Top5 精确到尺码(类型×尺码,净利)——
+sku5 = pd.DataFrame()
+if os.path.exists("data/top5_skus.json"):
+    sk5 = json.load(open("data/top5_skus.json"))
+    srows = []
+    for a, v in sk5.items():
+        for r in v.get("top_skus", []):
+            srows.append({"货号": a, "名称": v.get("name"), "LV价(₩)": v.get("lv_krw"),
+                          "LV可买码": f"{v.get('lv_sizes',[None])[0]}~{v.get('lv_sizes',[None])[-1]}",
+                          "颜色": r["颜色"], "版本": r["版本"], "尺码": r["尺码"],
+                          "出价₩": r["出价₩"], "均价₩": r["均价₩"], "净利¥": r["净利¥"],
+                          "利润率": r["利润率"], "真实成交": "实" if r["真实成交"] else "价"})
+    sku5 = pd.DataFrame(srows)
+
 os.makedirs(os.path.dirname(OUT), exist_ok=True)
 with pd.ExcelWriter(OUT, engine="openpyxl") as xw:
     if len(top5): top5.to_excel(xw, sheet_name="选品清单Top5", index=False)
+    if len(sku5): sku5.to_excel(xw, sheet_name="Top5_尺码精确", index=False)
     prof.to_excel(xw, sheet_name="线1_现货机会榜", index=False)
     if len(direct): direct.to_excel(xw, sheet_name="线2_直发机会榜", index=False)
     if len(listing): listing.to_excel(xw, sheet_name="线3_供给缺口", index=False)
