@@ -179,6 +179,20 @@ if os.path.exists("data/predict_hits.json"):
         "现价净利¥": r.get("net_cny"), "利润率": r.get("margin"), "预测依据": r.get("why"),
     } for r in ph])
 
+# —— 主输出: 直发选品(单模块,2026-08 起) ——
+directsel = pd.DataFrame()
+if os.path.exists("data/direct_select.json"):
+    ds = json.load(open("data/direct_select.json")).get("rows", [])
+    def _tier(s):
+        return "销量好" if s >= 10 else ("销量不好" if s <= 2 else "销量适中")
+    directsel = pd.DataFrame([{
+        "货号": r.get("article_no"), "名称": r.get("name"), "中国30天销量": r.get("cn_sold"),
+        "直发价(₩)": r.get("direct_krw"), "直发净利(₩)": r.get("net_krw"), "净利(¥)": r.get("net_cny"),
+        "利润率": r.get("margin"), "直发显示(¥)": r.get("cny_display"),
+        "超200万申报": "⚠是" if r.get("declare") else "", "月利润(¥)": r.get("month_y"),
+        "优先级": _tier(r.get("cn_sold") or 0),
+    } for r in ds])
+
 # —— 热门款(去官网确认可买用): 零售毛利 + 各折扣档净利 ——
 hotitems = pd.DataFrame()
 if os.path.exists("data/hot_items.json"):
@@ -192,6 +206,7 @@ if os.path.exists("data/hot_items.json"):
 
 os.makedirs(os.path.dirname(OUT), exist_ok=True)
 with pd.ExcelWriter(OUT, engine="openpyxl") as xw:
+    if len(directsel): directsel.to_excel(xw, sheet_name="直发选品_主榜", index=False)
     if len(top5): top5.to_excel(xw, sheet_name="选品清单Top5", index=False)
     if len(hotitems): hotitems.to_excel(xw, sheet_name="热门款_待确认可买", index=False)
     if len(comp): comp.to_excel(xw, sheet_name="综合表单_SKU", index=False)
