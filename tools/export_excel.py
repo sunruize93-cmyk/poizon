@@ -179,9 +179,21 @@ if os.path.exists("data/predict_hits.json"):
         "现价净利¥": r.get("net_cny"), "利润率": r.get("margin"), "预测依据": r.get("why"),
     } for r in ph])
 
+# —— 热门款(去官网确认可买用): 零售毛利 + 各折扣档净利 ——
+hotitems = pd.DataFrame()
+if os.path.exists("data/hot_items.json"):
+    hi = json.load(open("data/hot_items.json"))
+    hotitems = pd.DataFrame([{
+        "货号": r.get("article_no"), "名称": r.get("name"), "中国30天销量": r.get("cn_sold"),
+        "韩国卖家": r.get("kr_sold"), "得物价(₩)": r.get("cn_price_krw"), "LV价(₩)": r.get("lv_krw") or "",
+        "零售净利¥": r.get("net_d0%"), "9折净利¥": r.get("net_d10%"), "85折净利¥": r.get("net_d15%"),
+        "8折净利¥": r.get("net_d20%"), "需要折扣": r.get("discount_needed"),
+    } for r in hi])
+
 os.makedirs(os.path.dirname(OUT), exist_ok=True)
 with pd.ExcelWriter(OUT, engine="openpyxl") as xw:
     if len(top5): top5.to_excel(xw, sheet_name="选品清单Top5", index=False)
+    if len(hotitems): hotitems.to_excel(xw, sheet_name="热门款_待确认可买", index=False)
     if len(comp): comp.to_excel(xw, sheet_name="综合表单_SKU", index=False)
     if len(pred): pred.to_excel(xw, sheet_name="爆款预测", index=False)
     if len(sku5): sku5.to_excel(xw, sheet_name="Top5_尺码精确", index=False)
