@@ -193,6 +193,22 @@ if os.path.exists("data/direct_select.json"):
         "优先级": _tier(r.get("cn_sold") or 0),
     } for r in ds])
 
+# —— 直发赚钱池(批量筛选,2026-08 主输出): 全量直发净利>0 的候选 ——
+pool_df = pd.DataFrame()
+if os.path.exists("data/batch_direct.json"):
+    pool = json.load(open("data/batch_direct.json")).get("rows", [])
+    def _pt(r):
+        return "值得做" if (r.get("net_cny") or 0) >= 500 and (r.get("margin") or 0) >= 0.10 else (
+            "可做" if (r.get("net_cny") or 0) >= 300 and (r.get("margin") or 0) >= 0.08 else (
+            "勉强" if (r.get("net_cny") or 0) >= 150 and (r.get("margin") or 0) >= 0.06 else "太薄"))
+    pool_df = pd.DataFrame([{
+        "货号": r.get("article_no"), "名称": r.get("name"), "中国30天销量": r.get("cn_sold"),
+        "直发价(₩)": r.get("direct_krw"), "直发净利(₩)": r.get("net_krw"), "净利(¥)": r.get("net_cny"),
+        "利润率": r.get("margin"), "直发显示(¥)": r.get("cny_display"),
+        "超200万申报": "⚠" if r.get("declare") else "", "月利润(¥)": r.get("month_y"),
+        "分层": _pt(r),
+    } for r in pool])
+
 # —— 热门款(去官网确认可买用): 零售毛利 + 各折扣档净利 ——
 hotitems = pd.DataFrame()
 if os.path.exists("data/hot_items.json"):
@@ -206,6 +222,7 @@ if os.path.exists("data/hot_items.json"):
 
 os.makedirs(os.path.dirname(OUT), exist_ok=True)
 with pd.ExcelWriter(OUT, engine="openpyxl") as xw:
+    if len(pool_df): pool_df.to_excel(xw, sheet_name="直发赚钱池_全量", index=False)
     if len(directsel): directsel.to_excel(xw, sheet_name="直发选品_主榜", index=False)
     if len(top5): top5.to_excel(xw, sheet_name="选品清单Top5", index=False)
     if len(hotitems): hotitems.to_excel(xw, sheet_name="热门款_待确认可买", index=False)
