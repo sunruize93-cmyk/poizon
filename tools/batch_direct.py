@@ -76,7 +76,12 @@ def main():
     to_fetch = []
     for a in pool:
         ent = cache.get(a)
-        if ent is not None and not args.skip_cache_ok:
+        if args.skip_cache_ok:
+            # 离线模式:只用缓存,缺价跳过,不抓API
+            if ent is not None:
+                results[a] = {"skus": ent.get("skus", []), "age_h": age_h(ent)}
+            continue
+        if ent is not None:
             ag = age_h(ent)
             if ag is not None and ag <= TTL_H:
                 results[a] = {"skus": ent.get("skus", []), "age_h": ag}
@@ -84,7 +89,7 @@ def main():
         to_fetch.append(a)
 
     if args.skip_cache_ok:
-        print("离线模式:只用缓存,缺价跳过")
+        print(f"离线模式:只用缓存,缺价跳过(有缓存 {len(results)} 个)")
     elif to_fetch:
         print(f"需新抓 {len(to_fetch)} 个直发价(~{len(to_fetch)*8//60}分钟)…")
     for a in to_fetch:

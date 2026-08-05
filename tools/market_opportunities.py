@@ -61,6 +61,8 @@ def main():
     g["low_price"] = g["low_price"].fillna(0)
     g["cn_price"] = g["avg_price"].where(g["avg_price"] > 0, g["low_price"])
 
+    # 销量取整(含"<5"估算,避免显示小数点假精度);cn_masked 标记估算,下游显示时带*
+    g["cn_sold"] = g["cn_sold"].round().astype(int)
     # 缺口分：中国有量 + 本地卖家少。gap = 中国销量 / (本地销量+1)，再要求中国销量达门槛
     g["gap_ratio"] = g["cn_sold"] / (g["kr_sold"] + 1)
     # 「冷门潜力」= 中国销量中上 且 本地卖家极少（被忽视）

@@ -222,20 +222,9 @@ if os.path.exists("data/hot_items.json"):
 
 os.makedirs(os.path.dirname(OUT), exist_ok=True)
 with pd.ExcelWriter(OUT, engine="openpyxl") as xw:
+    # 2026-08-05 起: 只保留直发赚钱池(主筛选) + 直发SKU明细(看尺码/版本),其余旧表单已删
     if len(pool_df): pool_df.to_excel(xw, sheet_name="直发赚钱池_全量", index=False)
-    if len(directsel): directsel.to_excel(xw, sheet_name="直发选品_主榜", index=False)
-    if len(top5): top5.to_excel(xw, sheet_name="选品清单Top5", index=False)
-    if len(hotitems): hotitems.to_excel(xw, sheet_name="热门款_待确认可买", index=False)
-    if len(comp): comp.to_excel(xw, sheet_name="综合表单_SKU", index=False)
-    if len(pred): pred.to_excel(xw, sheet_name="爆款预测", index=False)
-    if len(sku5): sku5.to_excel(xw, sheet_name="Top5_尺码精确", index=False)
-    prof.to_excel(xw, sheet_name="线1_现货机会榜", index=False)
-    if len(direct): direct.to_excel(xw, sheet_name="线2_直发机会榜", index=False)
-    if len(listing): listing.to_excel(xw, sheet_name="线3_供给缺口", index=False)
-    if len(picks): picks.to_excel(xw, sheet_name="重点款_尺码版本", index=False)
     if len(direct_detail): direct_detail.to_excel(xw, sheet_name="直发_版本尺码明细", index=False)
-    if len(allc): allc.to_excel(xw, sheet_name="现货_全部测算", index=False)
-    if len(detail): detail.to_excel(xw, sheet_name="现货_版本尺码明细", index=False)
     for ws in xw.sheets.values():
         ws.freeze_panes = "A2"
         for col in ws.columns:
