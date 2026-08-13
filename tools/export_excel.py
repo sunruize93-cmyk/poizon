@@ -179,6 +179,19 @@ if os.path.exists("data/predict_hits.json"):
         "现价净利¥": r.get("net_cny"), "利润率": r.get("margin"), "预测依据": r.get("why"),
     } for r in ph])
 
+# —— 出价准备清单(利润倒推,人工审改后挂单) ——
+bidp = pd.DataFrame()
+if os.path.exists("data/bid_prep.json"):
+    bp = json.load(open("data/bid_prep.json")).get("rows", [])
+    bidp = pd.DataFrame([{
+        "货号": r.get("article_no"), "名称": r.get("name"), "中国30天销量": r.get("cn_sold"),
+        "LV价(₩)": r.get("lv_krw"), "成本(₩)": r.get("cost_krw"), "直发最低价(₩)": r.get("lowest_krw"),
+        "目标价(₩)": r.get("target_krw"), "建议出价(₩)": r.get("bid_krw"),
+        "预期净利(₩)": r.get("net_krw"), "净利(¥)": r.get("net_cny"), "预期利润率": r.get("margin"),
+        "直发显示(¥)": r.get("cny_display"), "超200万申报": "⚠" if r.get("declare") else "",
+        "状态": r.get("status"),
+    } for r in bp])
+
 # —— 主输出: 直发选品(单模块,2026-08 起) ——
 directsel = pd.DataFrame()
 if os.path.exists("data/direct_select.json"):
@@ -222,8 +235,9 @@ if os.path.exists("data/hot_items.json"):
 
 os.makedirs(os.path.dirname(OUT), exist_ok=True)
 with pd.ExcelWriter(OUT, engine="openpyxl") as xw:
-    # 2026-08-05 起: 只保留直发赚钱池(主筛选) + 直发SKU明细(看尺码/版本),其余旧表单已删
+    # 2026-08-05 起: 只保留直发赚钱池(主筛选) + 出价准备清单(挂单) + 直发SKU明细(看尺码/版本)
     if len(pool_df): pool_df.to_excel(xw, sheet_name="直发赚钱池_全量", index=False)
+    if len(bidp): bidp.to_excel(xw, sheet_name="出价准备清单", index=False)
     if len(direct_detail): direct_detail.to_excel(xw, sheet_name="直发_版本尺码明细", index=False)
     for ws in xw.sheets.values():
         ws.freeze_panes = "A2"
